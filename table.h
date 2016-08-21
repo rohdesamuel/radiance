@@ -36,7 +36,7 @@ enum class MutateBy {
 };
 
 template<class Key, class Component>
-struct Element {
+struct BaseElement {
 	IndexedBy indexed_by;
 	union {
 		Offset offset;
@@ -46,13 +46,13 @@ struct Element {
 	Component component;
 };
 
-template <class Key, class Component, class Allocator = std::allocator<Component>>
+template <class K, class C, class Allocator = std::allocator<C>>
 class Table {
 public:
-	typedef Key Key;
-	typedef Component Component;
+	typedef K Key;
+	typedef C Component;
 
-	typedef Element<Key, Component> Element;
+	typedef BaseElement<Key, Component> Element;
 
 	typedef ::boost::container::vector<Key> Keys;
 	typedef ::boost::container::vector<Component> Components;
@@ -71,6 +71,11 @@ public:
 			insert(std::move(std::get<0>(t)), std::move(std::get<1>(t)));
 		}
 	}
+	
+	struct Mutation {
+		MutateBy mutate_by;
+		BaseElement<Key, Component> el;
+	};
 
 	class Reader {
 	public:
@@ -78,7 +83,7 @@ public:
 		static void read(Table* table, System system, IndexedBy indexed_by) {
 			switch (indexed_by) {
 				case IndexedBy::OFFSET:
-					for (INT i = 0; i < (INT)table->size(); ++i) {
+					for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
 						thread_local static Frame frame;
 						frame.clear();
 						frame.result(Element{ indexed_by, (Offset)i, table->component(i) });
@@ -86,7 +91,7 @@ public:
 					}
 					break;
 				case IndexedBy::HANDLE:
-					for (INT i = 0; i < (INT)table->size(); ++i) {
+					for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
 						thread_local static Frame frame;
 						frame.clear();
 						frame.result(Element{ indexed_by, (Handle)table->find(table->key(i)), table->component(i) });
@@ -94,7 +99,7 @@ public:
 					}
 					break;
 				case IndexedBy::KEY:
-					for (INT i = 0; i < (INT)table->size(); ++i) {
+					for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
 						thread_local static Frame frame;
 						frame.clear();
 						frame.result(Element{ indexed_by, (Key)table->key(i), table->component(i) });
@@ -152,7 +157,7 @@ public:
 	}
 
 	Handle find(Key&& key) const {
-		Index::const_iterator it = index_.find(key);
+		typename Index::const_iterator it = index_.find(key);
 		if (it != index_.end()) {
 			return it->second;
 		}
@@ -160,7 +165,7 @@ public:
 	}
 
 	Handle find(const Key& key) const {
-		Index::const_iterator it = index_.find(key);
+		typename Index::const_iterator it = index_.find(key);
 		if (it != index_.end()) {
 			return it->second;
 		}
@@ -180,7 +185,7 @@ public:
 	}
 
 	inline const Component& component(uint64_t index) const {
-		return >components[index];
+		return components[index];
 	}
 
 	uint64_t size() const {
@@ -209,14 +214,6 @@ public:
 		return 0;
 	}
 
-	void print() {
-		print_vector("Data", data);
-		print_vector("Keys", keys);
-		print_vector("Handles", handles_);
-		print_vector("Free Handles", free_handles_);
-		std::cout << std::endl;
-	}
-
 	Keys keys;
 	Components components;
 
@@ -240,13 +237,11 @@ private:
 	Index index_;
 };
 
-template <class Table>
+template <class T>
 class View {
-	Table* table_;
-
 public:
-	typedef Table Table;
-	typedef Element<typename Table::Key, const typename Table::Component&> Element;
+	typedef T Table;
+	typedef BaseElement<typename Table::Key, const typename Table::Component&> Element;
 
 	View(Table* table) : table_(table) {}
 
@@ -256,7 +251,7 @@ public:
 		static void read(View* view, System system, IndexedBy indexed_by) {
 			switch (indexed_by) {
 				case IndexedBy::OFFSET:
-					for (INT i = 0; i < (INT)view->size(); ++i) {
+					for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
 						thread_local static Frame frame;
 						frame.clear();
 						frame.result(Element{ indexed_by, (Offset)i, view->component(i) });
@@ -264,7 +259,7 @@ public:
 					}
 					break;
 				case IndexedBy::HANDLE:
-					for (INT i = 0; i < (INT)view->size(); ++i) {
+					for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
 						thread_local static Frame frame;
 						frame.clear();
 						frame.result(Element{ indexed_by, (Handle)view->find(view->key(i)), view->component(i) });
@@ -272,7 +267,7 @@ public:
 					}
 					break;
 				case IndexedBy::KEY:
-					for (INT i = 0; i < (INT)view->size(); ++i) {
+					for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
 						thread_local static Frame frame;
 						frame.clear();
 						frame.result(Element{ indexed_by, (typename Table::Key)view->key(i), view->component(i) });
@@ -306,18 +301,14 @@ public:
 	inline uint64_t size() const {
 		return table_->components.size();
 	}
-};
-
-template<class Table>
-struct Mutation {
-	MutateBy mutate_by;
-	typename Element<typename Table::Key, typename Table::Component> el;
+private:
+	Table* table_;
 };
 
 template<class Table>
 class MutationQueue {
 public:
-	typedef Mutation<Table> Mutation;
+	typedef typename Table::Mutation Mutation;
 
 	const uint64_t INITIAL_SIZE = 4096;
 
@@ -358,7 +349,7 @@ public:
 	// Create a standard writer.
 	template<class Sys>
 	static auto create_writer(MutationQueue* queue, Sys system) {
-		return make_element_system<typename Sys::In, void>([=](typename Sys::In el) {
+		return std::function<typename Sys::In()>([=](typename Sys::In el) {
 			queue->push(system(el));
 		});
 	}

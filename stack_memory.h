@@ -40,7 +40,7 @@ public:
 	template<class T>
 	void free(T* t) {
 		DEBUG_OP(
-			std::memset((void*)t, 0, sizeof(T))
+			memset((void*)t, 0, sizeof(T));
 		);
 	}
 

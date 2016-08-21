@@ -15,7 +15,6 @@
 
 #include "radiance.h"
 
-#include "console_draw.h"
 #include "timer.h"
 #include "vector_math.h"
 
@@ -78,8 +77,6 @@ int main() {
 	int32_t(*read)[80][80] = &life_grid_buffer[0];
 	int32_t(*write)[80][80] = &life_grid_buffer[1];
 
-	HANDLE hCD = CD_CreateWindow(0, 0, MAX_WIDTH, MAX_HEIGHT);
-
 	Springs springs;
 	Transformations transformations;
 	//PhysicsModule<Transformations, Springs> physics_mod;
@@ -99,7 +96,9 @@ int main() {
 	srand((uint32_t)time(NULL));
 	for (uint64_t i = 0; i < count; ++i) {
 		for (uint64_t j = 0; j < count; ++j) {
-			springs.insert(i, Springs::Component({ { j, 0.0000001 } }));
+			Springs::Component springs_list;
+			springs_list.push_back(std::tuple<Handle, float>{ j, 0.0000001 });
+			springs.insert(i, std::move(springs_list));
 		}
 	}
 
@@ -129,7 +128,7 @@ int main() {
 
 		float l = el->component.v.length();
 		el->component.v.normalize();
-		el->component.v *= min(l, 10.0f);
+		el->component.v *= std::min(l, 10.0f);
 		el->component.p += el->component.v;
 	});
 
@@ -137,23 +136,14 @@ int main() {
 		auto* el = frame->result<Transformations::Element>();
 
 		if (el->component.p.x <= 0 || el->component.p.x >= MAX_WIDTH - 1) {
-			el->component.p.x = min(max(el->component.p.x, 0), MAX_WIDTH - 1);
+			el->component.p.x = std::min(std::max(el->component.p.x, 0.0f), (float)(MAX_WIDTH - 1));
 			el->component.v.x *= -0.9f;
 		}
 
 		if (el->component.p.y <= 0 || el->component.p.y >= MAX_HEIGHT - 1) {
-			el->component.p.y = min(max(el->component.p.y, 0), MAX_HEIGHT - 1);
+			el->component.p.y = std::min(std::max(el->component.p.y, 0.0f), (float)(MAX_HEIGHT - 1));
 			el->component.v.y *= -0.9f;
 		}
-	});
-
-	auto draw_system = System([&](Frame* frame) {
-		auto* el = frame->result<TransformationSchema::View::Element>();
-		auto& c = el->component;
-		CD_SetBufferChar(hCD, (int)c.p.x, (int)c.p.y, ' ', CD_BG_BLUE | CD_BG_INTENSE);
-		/*CD_SetBufferChar(hCD, (int)c.p.x+1, (int)c.p.y, ' ', CD_BG_BLUE | CD_BG_INTENSE);
-		CD_SetBufferChar(hCD, (int)c.p.x, (int)c.p.y+1, ' ', CD_BG_BLUE | CD_BG_INTENSE);
-		CD_SetBufferChar(hCD, (int)c.p.x+1, (int)c.p.y+1, ' ', CD_BG_BLUE | CD_BG_INTENSE);*/
 	});
 
 	float delta_time = 1.0;
@@ -162,37 +152,24 @@ int main() {
 
 	Pipeline<SpringsSchema::View, Transformations> springs_pipeline(&springs_view, &transformations, spring, IndexedBy::KEY);
 	Pipeline<Transformations, Transformations> transformations_pipeline(&transformations, &transformations, bound_position * move, IndexedBy::OFFSET);
-	Pipeline<TransformationSchema::View, void> draw_pipeline(&transformations_view, draw_system, IndexedBy::OFFSET);
 
-	WindowTimer fps(60);
+	//WindowTimer fps(60);
 	uint64_t frame = 0;
 	while (1) {
-		CD_Refresh(hCD);
-
-		fps.start();
+		//fps.start();
+		Timer t;
+		t.start();
 		if (frame % 1 == 0) {
-			physics_pipeline({ springs_pipeline, transformations_pipeline, draw_pipeline });
+			physics_pipeline({ springs_pipeline, transformations_pipeline });
 		} else {
-			physics_pipeline({ transformations_pipeline, draw_pipeline });
+			physics_pipeline({ transformations_pipeline });
 		}
-		fps.stop();
-		fps.step();
-
-
-		char buf[64] = { 0 };
-		sprintf_s(buf, "%.3fms", fps.get_avg_elapsed_ns() / 1e6);
-		std::string fps_str(buf);
-
-		while (fps_str.size() < 10) {
-			fps_str = " " + fps_str;
-		}
-
-		WORD color = (fps.get_avg_elapsed_ns() / 1e6) > 10 ? CD_FG_RED : CD_FG_GREEN;
-		for (int i = 0; i < fps_str.size(); ++i) {
-			CD_SetBufferChar(hCD, i, 0, fps_str[i], color | CD_FG_INTENSE);
-		}
-
-		CD_DrawScreen(hCD);
+		t.stop();
+		
+		std::cout << t.get_elapsed_ns() << std::endl;
+		
+		//fps.stop();
+		//fps.step();
 
 		++frame;
 	}

@@ -9,7 +9,7 @@
 #define SYSTEM__H
 
 #include <functional>
-#include <boost/container/list.hpp>
+#include <list>
 
 #include "common.h"
 
@@ -92,7 +92,7 @@ public:
 	}
 };
 
-typedef boost::container::list<std::function<void(void)>> SystemQueue;
+typedef std::list<std::function<void(void)>> SystemQueue;
 
 }
 
