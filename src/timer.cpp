@@ -95,7 +95,7 @@ void WindowTimer::start() {
 
 // Starts the timer.
 void WindowTimer::step() {
-	window_[iterator_++] = get_elapsed_cycles();
+	window_[iterator_++] = get_elapsed_ns();
 	iterator_ = iterator_ % window_size_;
 }
 
@@ -149,15 +149,11 @@ double WindowTimer::get_avg_elapsed_cycles() {
 
 // Gets the average elapsed time in [ns] since start.
 double WindowTimer::get_avg_elapsed_ns() {
-#ifdef __COMPILE_AS_WINDOWS__
 	double accum = 0;
 	for (auto& n : window_) {
-		accum += (n * NS_TO_SEC) / freq_.QuadPart;
+		accum += n;
 	}
 	return accum / window_size_;
-#elif (defined __COMPILE_AS_LINUX__)
-	return 0;
-#endif
 }
 
 // Gets the clock frequency of the CPU.

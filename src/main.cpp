@@ -86,11 +86,15 @@ int main() {
 	uint64_t count = 1000;
 
 	for (uint64_t i = 0; i < count; ++i) {
-		Vec3 p = { (float)(rand() % MAX_WIDTH), (float)(rand() % MAX_HEIGHT), 0 };
+		Vec3 p = {
+			(float)(rand() % MAX_WIDTH), (float)(rand() % MAX_HEIGHT),
+			0
+		};
 		Vec3 v;
 		v.x = (((float)(rand() % 10000)) - 5000.0f) / 50000.0f;
 		v.y = (((float)(rand() % 10000)) - 5000.0f) / 50000.0f;
-		transformations_queue.emplace<MutateBy::INSERT, IndexedBy::OFFSET>((int64_t)i, { p, v });
+		transformations_queue.emplace<MutateBy::INSERT, IndexedBy::OFFSET>(
+			(int64_t)i, { p, v });
 	}
 	transformations_queue.flush(&transformations);
 	srand((uint32_t)time(NULL));
@@ -150,26 +154,27 @@ int main() {
 
 	auto physics_pipeline = TransformationSchema::make_system_queue();
 
-	Pipeline<SpringsSchema::View, Transformations> springs_pipeline(&springs_view, &transformations, spring, IndexedBy::KEY);
-	Pipeline<Transformations, Transformations> transformations_pipeline(&transformations, &transformations, bound_position * move, IndexedBy::OFFSET);
+	Pipeline<SpringsSchema::View, Transformations> springs_pipeline(
+		&springs_view, &transformations, spring, IndexedBy::KEY);
+	Pipeline<Transformations, Transformations> transformations_pipeline(
+		&transformations, &transformations, bound_position * move,
+		IndexedBy::OFFSET);
 
-	//WindowTimer fps(60);
+	WindowTimer fps(60);
 	uint64_t frame = 0;
 	while (1) {
-		//fps.start();
-		Timer t;
-		t.start();
+		fps.start();
+
 		if (frame % 1 == 0) {
 			physics_pipeline({ springs_pipeline, transformations_pipeline });
 		} else {
 			physics_pipeline({ transformations_pipeline });
 		}
-		t.stop();
 		
-		std::cout << t.get_elapsed_ns()/1e6 << std::endl;
-		
-		//fps.stop();
-		//fps.step();
+		fps.stop();
+		fps.step();
+
+		std::cout << fps.get_avg_elapsed_ns()/1e6 << std::endl;
 
 		++frame;
 	}
