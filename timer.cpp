@@ -27,7 +27,8 @@ double Timer::get_elapsed_ns() {
 #ifdef __COMPILE_AS_WINDOWS__
 	return (get_elapsed_cycles() * NS_TO_SEC) / freq_.QuadPart;
 #elif defined (__COMPILE_AS_LINUX__)
-	return diff(start_, end_).tv_nsec;
+	timespec tmp = diff(start_, end_);
+	return (1e9 * tmp.tv_sec) + tmp.tv_nsec;
 #endif
 }
 
@@ -124,7 +125,7 @@ int64_t WindowTimer::get_elapsed_cycles() {
 #ifdef __COMPILE_AS_WINDOWS__
 	return end_.QuadPart - start_.QuadPart;
 #elif (defined __COMPILE_AS_LINUX__)
-	return timer_.get_avg_elapsed_cycles();
+	return timer_.get_elapsed_cycles();
 #endif
 }
 
@@ -133,7 +134,7 @@ double WindowTimer::get_elapsed_ns() {
 #ifdef __COMPILE_AS_WINDOWS__
 	return (get_elapsed_cycles() * NS_TO_SEC) / freq_.QuadPart;
 #elif defined (__COMPILE_AS_LINUX__)
-	return timer_.get_avg_elapsed_ns();
+	return timer_.get_elapsed_ns();
 #endif
 }
 

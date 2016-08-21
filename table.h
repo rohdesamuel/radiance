@@ -346,14 +346,6 @@ public:
 		return mutations_.push(m);
 	}
 
-	// Create a standard writer.
-	template<class Sys>
-	static auto create_writer(MutationQueue* queue, Sys system) {
-		return std::function<typename Sys::In()>([=](typename Sys::In el) {
-			queue->push(system(el));
-		});
-	}
-
 	template<MutateBy mutate_by, IndexedBy indexed_by, class IndexType>
 	void emplace(IndexType&& index, typename Table::Component&& component) {
 		push(Mutation{ mutate_by,{ indexed_by, std::move(index), std::move(component) } });

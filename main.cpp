@@ -166,7 +166,7 @@ int main() {
 		}
 		t.stop();
 		
-		std::cout << t.get_elapsed_ns() << std::endl;
+		std::cout << t.get_elapsed_ns()/1e6 << std::endl;
 		
 		//fps.stop();
 		//fps.step();
