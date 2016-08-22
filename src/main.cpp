@@ -73,10 +73,10 @@ int main() {
 	const int MAX_HEIGHT = 640 / 8;
 	const int MAX_WIDTH = 640 / 8;
 
-	int32_t life_grid_buffer[2][MAX_HEIGHT][MAX_WIDTH];
-	int32_t(*read)[80][80] = &life_grid_buffer[0];
-	int32_t(*write)[80][80] = &life_grid_buffer[1];
-
+	// int32_t life_grid_buffer[2][MAX_HEIGHT][MAX_WIDTH];
+	// int32_t(*read)[80][80] = &life_grid_buffer[0];
+	// int32_t(*write)[80][80] = &life_grid_buffer[1];
+  
 	Springs springs;
 	Transformations transformations;
 	//PhysicsModule<Transformations, Springs> physics_mod;
@@ -149,8 +149,6 @@ int main() {
 			el->component.v.y *= -0.9f;
 		}
 	});
-
-	float delta_time = 1.0;
 
 	auto physics_pipeline = TransformationSchema::make_system_queue();
 

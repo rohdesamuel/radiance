@@ -1,25 +1,32 @@
+#include "common.h"
 #include "vector_math.h"
 
+#include <cstdint>
 #include <math.h>
 
+#ifdef __COMPILE_AS_LINUX__
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#endif
 float fast_invsqrt(float number) {
 	long i;
 	float x2, y;
 	const float threehalfs = 1.5F;
 
-	x2 = number * 0.5F;
+  x2 = number * 0.5F;
 	y = number;
-	i = *(long *)&y;                       // evil floating point bit level hacking
-	i = 0x5f3759df - (i >> 1);               // what the fuck?
+	i = *(long*)(&y);  // evil floating point bit level hacking
+	i = 0x5f3759df - (i >> 1);  // what the fuck?
 	y = *(float *)&i;
-	y = y * (threehalfs - (x2 * y * y));   // 1st iteration
-										   //      y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+	y = y * (threehalfs - (x2 * y * y));  // 1st iteration
+
+  // 2nd iteration, this can be removed
+	// y  = y * ( threehalfs - ( x2 * y * y ) );
 
 	return y;
 }
 
 float fast_sqrt(float number) {
-	return 1 / fast_invsqrt(number);
+	return 1.0f / fast_invsqrt(number);
 }
 
 Vec2::Vec2() {

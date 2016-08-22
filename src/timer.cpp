@@ -28,7 +28,7 @@ double Timer::get_elapsed_ns() {
 	return (get_elapsed_cycles() * NS_TO_SEC) / freq_.QuadPart;
 #elif defined (__COMPILE_AS_LINUX__)
 	timespec tmp = diff(start_, end_);
-	return (1e9 * tmp.tv_sec) + tmp.tv_nsec;
+	return (NS_TO_SEC * tmp.tv_sec) + tmp.tv_nsec;
 #endif
 }
 

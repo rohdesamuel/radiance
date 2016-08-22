@@ -106,6 +106,8 @@ public:
 						system(&frame);
 					}
 					break;
+        case IndexedBy::UNKNOWN:
+          break;
 			}
 		}
 	};
@@ -124,6 +126,8 @@ public:
 				case IndexedBy::KEY:
 					table->components[table->find(el->key)] = std::move(el->component);
 					break;
+        case IndexedBy::UNKNOWN:
+          break;
 			}
 		}
 	};
@@ -274,6 +278,8 @@ public:
 						system(&frame);
 					}
 					break;
+        case IndexedBy::UNKNOWN:
+          break;
 			}
 		}
 	};
