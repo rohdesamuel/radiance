@@ -17,6 +17,7 @@
 #include <boost/container/vector.hpp>
 
 #include "common.h"
+#include "system.h"
 
 namespace radiance
 {

@@ -147,7 +147,7 @@ typedef PositionSchema::Table Positions;
 
 int main() {
   Positions positions;
-  uint32_t entity_count = 1000;
+  uint32_t entity_count = 10000;
   for (uint32_t i = 0; i < entity_count; ++i) {
     positions.insert(i, { (float)(rand() % 1000), (float)(rand() % 1000)});
   }
