@@ -12,6 +12,7 @@
 #include <list>
 
 #include "common.h"
+#include "stack_memory.h"
 
 namespace radiance
 {
@@ -85,9 +86,10 @@ public:
   }
 
   System operator*(System system) {
-    return System([=](Frame* frame) {
+    std::function<void(Frame*)>& my_system = f_;
+    return System([my_system, system](Frame* frame) {
       system(frame);
-      f_(frame);
+      my_system(frame);
     });
   }
 };

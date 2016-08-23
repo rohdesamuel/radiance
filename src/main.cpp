@@ -147,47 +147,59 @@ typedef PositionSchema::Table Positions;
 
 int main() {
   Positions positions;
-  uint32_t entity_count = 65536;
+  uint32_t entity_count = 1000;
   for (uint32_t i = 0; i < entity_count; ++i) {
     positions.insert(i, { (float)(rand() % 1000), (float)(rand() % 1000)});
   }
+
   auto system_1 = radiance::System([](radiance::Frame* frame) {
     auto* el = frame->result<Positions::Element>();
     ++el->component.x;
     --el->component.y;
   });
+
   auto system_2 = radiance::System([](radiance::Frame* frame) {
     auto* el = frame->result<Positions::Element>();
     ++el->component.x;
     ++el->component.y;
   });
+
   auto system_3 = radiance::System([](radiance::Frame* frame) {
     auto* el = frame->result<Positions::Element>();
     --el->component.x;
     --el->component.y;
   });
-  auto system = (system_1 * system_2) * system_3;
-  radiance::Pipeline<Positions, Positions> pipeline(&positions, &positions, system, radiance::IndexedBy::OFFSET);
 
+  auto system = system_1 * system_2 * system_3;
   
   WindowTimer fps(60);
   uint64_t frame = 0;
   uint32_t max_iterations = 10000;
-  while (frame <= max_iterations) {
+  while (frame < max_iterations) {
     fps.start();
 
-    pipeline();
+    radiance::Pipeline<Positions, Positions>::run(
+        &positions,
+        &positions,
+        system,
+        radiance::IndexedBy::OFFSET
+    );
     
     fps.stop();
     fps.step();
 
-    std::cout << frame << ": " << (1000 * entity_count) / (fps.get_avg_elapsed_ns()/1e6) << "\r";
+    std::cout << frame << ": "
+      << (1000 * entity_count) / (fps.get_avg_elapsed_ns()/1e6) << "\r";
     std::cout.flush();
     ++frame;
   }
+  std::cout << "\n";
   for (auto& c : positions.components) {
-    std::cout << "(" << c.x << ", " << c.y << ")\n";
+    std::cout << "(" << c.x << ", " << c.y << ")\r";
   }
   std::cout << "\n";
+  std::cout << "Throughput = "
+    << (int)((1000 * entity_count) / (fps.get_avg_elapsed_ns()/1e6))
+    << "[entity/s]\n";
   return 0;
 }
