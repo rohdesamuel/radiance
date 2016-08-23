@@ -51,13 +51,13 @@ namespace radiance
 
 template<typename T>
 struct  CacheAlligned {
-	T data;
+  T data;
 };
 #elif defined __COMPILE_AS_WINDOWS__
 #define __CACHE_ALIGNED__ __declspec(align(CACHE_LINE_SIZE))
 template<typename T>
 struct __CACHE_ALIGNED__ CacheAlligned {
-	T data;
+  T data;
 };
 #endif
 
@@ -69,10 +69,10 @@ namespace error
 {
 
 enum Codes {
-	OK = 0,
-	MEMORY_LEAK,
-	MEMORY_OUT_OF_BOUNDS,
-	NULL_POINTER,
+  OK = 0,
+  MEMORY_LEAK,
+  MEMORY_OUT_OF_BOUNDS,
+  NULL_POINTER,
   UNKNOWN_INDEXED_BY_VALUE
 };
 
