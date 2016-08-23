@@ -188,16 +188,11 @@ int main() {
     fps.stop();
     fps.step();
 
-    std::cout << frame << ": "
-      << (1000 * entity_count) / (fps.get_avg_elapsed_ns()/1e6) << "\r";
-    std::cout.flush();
     ++frame;
   }
-  std::cout << "\n";
   for (auto& c : positions.components) {
     std::cout << "(" << c.x << ", " << c.y << ")\r";
   }
-  std::cout << "\n";
   std::cout << "Throughput = "
     << (int)((1000 * entity_count) / (fps.get_avg_elapsed_ns()/1e6))
     << "[entity/s]\n";
