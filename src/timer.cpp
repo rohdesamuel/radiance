@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "timer.h"
 
 double NS_TO_SEC = 1e9;
@@ -9,6 +11,7 @@ Timer::Timer() {
 
 void Timer::start() {
 #ifdef __COMPILE_AS_WINDOWS__
+  get_clock_frequency();
   QueryPerformanceCounter(&start_);
 #elif defined (__COMPILE_AS_LINUX__)
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_);
@@ -25,18 +28,10 @@ void Timer::stop() {
 
 double Timer::get_elapsed_ns() {
 #ifdef __COMPILE_AS_WINDOWS__
-  return (get_elapsed_cycles() * NS_TO_SEC) / freq_.QuadPart;
+  return ((end_.QuadPart - start_.QuadPart) * NS_TO_SEC) / (double)freq_.QuadPart;
 #elif defined (__COMPILE_AS_LINUX__)
   timespec tmp = diff(start_, end_);
   return (NS_TO_SEC * tmp.tv_sec) + tmp.tv_nsec;
-#endif
-}
-
-int64_t Timer::get_elapsed_cycles() {
-#ifdef __COMPILE_AS_WINDOWS__
-  return end_.QuadPart - start_.QuadPart;
-#elif defined (__COMPILE_AS_LINUX__)
-  return 0;
 #endif
 }
 
@@ -54,20 +49,18 @@ timespec Timer::diff(timespec start, timespec end) {
 }
 #endif
 
-int64_t Timer::get_clock_frequency() {
 #ifdef __COMPILE_AS_WINDOWS__
+int64_t Timer::get_clock_frequency() {
   if (!freq_.QuadPart) {
     QueryPerformanceFrequency(&freq_);
   }
   return freq_.QuadPart;
-#elif defined (__COMPILE_AS_LINUX__)
-  return 0;
-#endif
 }
+#endif
 
 void Timer::reset() {
 #ifdef __COMPILE_AS_WINDOWS__
-  start_ = end_ = LARGE_INTEGER();
+  freq_ = start_ = end_ = LARGE_INTEGER();
 #elif defined (__COMPILE_AS_LINUX__)
   start_.tv_sec = end_.tv_sec = 0;
   start_.tv_nsec = end_.tv_nsec = 0;
@@ -81,16 +74,11 @@ WindowTimer::WindowTimer(uint8_t window_size) : iterator_(0) {
     window_.push_back(0);
   }
   reset();
-  get_clock_frequency();
 }
 
 // Starts the timer.
 void WindowTimer::start() {
-#ifdef __COMPILE_AS_WINDOWS__
-  QueryPerformanceCounter(&start_);
-#elif (defined __COMPILE_AS_LINUX__)
   timer_.start();
-#endif
 }
 
 // Starts the timer.
@@ -101,50 +89,20 @@ void WindowTimer::step() {
 
 // Stops the timer.
 void WindowTimer::stop() {
-#ifdef __COMPILE_AS_WINDOWS__
-  QueryPerformanceCounter(&end_);
-#elif (defined __COMPILE_AS_LINUX__)
   timer_.stop();
-#endif
 }
 
 // Stops and resets the timer.
 void WindowTimer::reset() {
-#ifdef __COMPILE_AS_WINDOWS__
-  start_ = end_ = LARGE_INTEGER();
-#elif (defined __COMPILE_AS_LINUX__)
   timer_.reset();
-#endif
   for (uint8_t i = 0; i < window_size_; ++i) {
     window_[i] = 0;
   }
 }
 
-// Gets the average amount of elapsed clock cycles since start.
-int64_t WindowTimer::get_elapsed_cycles() {
-#ifdef __COMPILE_AS_WINDOWS__
-  return end_.QuadPart - start_.QuadPart;
-#elif (defined __COMPILE_AS_LINUX__)
-  return timer_.get_elapsed_cycles();
-#endif
-}
-
 // Gets the average elapsed time in [ns] since start.
 double WindowTimer::get_elapsed_ns() {
-#ifdef __COMPILE_AS_WINDOWS__
-  return (get_elapsed_cycles() * NS_TO_SEC) / freq_.QuadPart;
-#elif defined (__COMPILE_AS_LINUX__)
   return timer_.get_elapsed_ns();
-#endif
-}
-
-// double the average amount of elapsed clock cycles since start.
-double WindowTimer::get_avg_elapsed_cycles() {
-  double accum = 0;
-  for (auto& n : window_) {
-    accum += n;
-  }
-  return accum / window_size_;
 }
 
 // Gets the average elapsed time in [ns] since start.
@@ -154,16 +112,4 @@ double WindowTimer::get_avg_elapsed_ns() {
     accum += n;
   }
   return accum / window_size_;
-}
-
-// Gets the clock frequency of the CPU.
-int64_t WindowTimer::get_clock_frequency() {
-#ifdef __COMPILE_AS_WINDOWS__
-  if (!freq_.QuadPart) {
-    QueryPerformanceFrequency(&freq_);
-  }
-  return freq_.QuadPart;
-#elif (defined __COMPILE_AS_LINUX__)
-  return 0;
-#endif
 }

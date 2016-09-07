@@ -3,13 +3,15 @@
 
 #include <boost/container/vector.hpp>
 
+#include "common.h"
+
 #ifdef __COMPILE_AS_WINDOWS__
 #include <Windows.h>
+#undef min
+#undef max
 #elif defined (__COMPILE_AS_LINUX__)
 #include <time.h>
 #endif
-
-#include "common.h"
 
 class Timer {
 public:
@@ -23,20 +25,18 @@ public:
   // Stops and resets the timer.
   void reset();
 
-  // Gets the amount of elapsed clock cycles since start.
-  int64_t get_elapsed_cycles();
-
   // Gets the elapsed time in [ns] since start.
   double get_elapsed_ns();
-
-  // Gets the clock frequency of the CPU.
-  int64_t get_clock_frequency();
 
 private:
 #ifdef __COMPILE_AS_WINDOWS__
   LARGE_INTEGER start_;
   LARGE_INTEGER end_;
   LARGE_INTEGER freq_;
+
+  // Gets the clock frequency of the CPU.
+  int64_t get_clock_frequency();
+
 #elif defined (__COMPILE_AS_LINUX__)
   timespec start_;
   timespec end_;
@@ -62,29 +62,14 @@ public:
   // Stops and resets the timer.
   void reset();
 
-  // Gets the average amount of elapsed clock cycles since start.
-  int64_t get_elapsed_cycles();
-
   // Gets the average elapsed time in [ns] since start.
   double get_elapsed_ns();
-
-  // Gets the average amount of elapsed clock cycles since start.
-  double get_avg_elapsed_cycles();
 
   // Gets the average elapsed time in [ns] since start.
   double get_avg_elapsed_ns();
 
-  // Gets the clock frequency of the CPU.
-  int64_t get_clock_frequency();
-
 private:
-#ifdef __COMPILE_AS_WINDOWS__
-  LARGE_INTEGER start_;
-  LARGE_INTEGER end_;
-  LARGE_INTEGER freq_;
-#elif defined (__COMPILE_AS_LINUX__)
   Timer timer_;
-#endif
 
   uint8_t iterator_;
   uint8_t window_size_;
