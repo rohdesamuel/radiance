@@ -6,7 +6,9 @@ double NS_TO_SEC = 1e9;
 
 Timer::Timer() {
   reset();
+#ifdef __COMPILE_AS_WINDOWS__
   get_clock_frequency();
+#endif
 }
 
 void Timer::start() {
