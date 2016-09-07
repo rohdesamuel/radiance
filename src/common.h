@@ -64,6 +64,7 @@ struct __CACHE_ALIGNED__ CacheAlligned {
 typedef int64_t Handle;
 typedef int64_t Offset;
 typedef int64_t Entity;
+typedef int64_t Id;
 
 namespace error
 {

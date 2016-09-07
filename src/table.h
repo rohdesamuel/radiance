@@ -79,7 +79,17 @@ public:
   };
 
   class Reader {
+  private:
+    IndexedBy indexed_by_;
+
   public:
+    Reader(IndexedBy indexed_by): indexed_by_(indexed_by) {}
+
+    template<class System>
+    void operator()(Table* table, System system) const {
+      read(table, system, indexed_by_);
+    }
+
     template<class System>
     static void read(Table* table, System system, IndexedBy indexed_by) {
       switch (indexed_by) {
@@ -108,7 +118,8 @@ public:
           for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
             thread_local static Frame frame;
             frame.clear();
-            frame.result(Element{ indexed_by, (Key)table->key(i), table->component(i) });
+            frame.result(
+                Element{ indexed_by, (Key)table->key(i), table->component(i) });
             system(&frame);
           }
           break;
@@ -135,6 +146,10 @@ public:
         case IndexedBy::UNKNOWN:
           break;
       }
+    }
+
+    void operator()(Table* table, Frame* frame) const {
+      write(table, frame);
     }
   };
 
@@ -256,7 +271,17 @@ public:
   View(Table* table) : table_(table) {}
 
   class Reader {
+  private:
+    IndexedBy indexed_by_;
+
   public:
+    Reader(IndexedBy indexed_by): indexed_by_(indexed_by) {}
+
+    template<class System>
+    void operator()(View* view, System system) const {
+      read(view, system, indexed_by_);
+    }
+
     template<class System>
     static void read(View* view, System system, IndexedBy indexed_by) {
       switch (indexed_by) {

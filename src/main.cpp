@@ -18,9 +18,11 @@
 #include "timer.h"
 #include "vector_math.h"
 
-#if 0
-using namespace radiance;
+#include "component.h"
+#include "benchmark.h"
 
+using namespace radiance;
+#if 0
 struct Transformation {
   Vec3 p;
   Vec3 v;
@@ -54,6 +56,7 @@ int main() {
     transformations_queue.emplace<MutateBy::INSERT, IndexedBy::OFFSET>(
       (int64_t)i, { p, v });
   }
+
   transformations_queue.flush(&transformations);
   srand((uint32_t)time(NULL));
   for (uint64_t i = 0; i < count; ++i) {
@@ -92,29 +95,36 @@ int main() {
     el->component.p += el->component.v;
   });
 
-  auto bound_position = System([=](Frame* frame) {
-    auto* el = frame->result<Transformations::Element>();
+  auto bind_position = System::compile(
+    [](Frame* frame, int max_width, int max_height) {
+      auto* el = frame->result<Transformations::Element>();
 
-    if (el->component.p.x <= 0 || el->component.p.x >= MAX_WIDTH - 1) {
-      el->component.p.x = std::min(
-          std::max(el->component.p.x, 0.0f), (float)(MAX_WIDTH - 1));
-      el->component.v.x *= -0.9f;
-    }
+      if (el->component.p.x <= 0 || el->component.p.x >= max_width - 1) {
+        el->component.p.x = std::min(
+            std::max(el->component.p.x, 0.0f), (float)(max_width - 1));
+        el->component.v.x *= -0.9f;
+      }
 
-    if (el->component.p.y <= 0 || el->component.p.y >= MAX_HEIGHT - 1) {
-      el->component.p.y = std::min(
-          std::max(el->component.p.y, 0.0f), (float)(MAX_HEIGHT - 1));
-      el->component.v.y *= -0.9f;
-    }
-  });
+      if (el->component.p.y <= 0 || el->component.p.y >= max_height - 1) {
+        el->component.p.y = std::min(
+            std::max(el->component.p.y, 0.0f), (float)(max_height - 1));
+        el->component.v.y *= -0.9f;
+      }
+    }, MAX_WIDTH, MAX_HEIGHT);
 
   auto physics_pipeline = TransformationSchema::make_system_queue();
 
   Pipeline<SpringsSchema::View, Transformations> springs_pipeline(
-    &springs_view, &transformations, spring, IndexedBy::KEY);
+      &springs_view,
+      &transformations,
+      SpringsSchema::View::Reader(IndexedBy::KEY),
+      Transformations::Writer{}, spring);
+
   Pipeline<Transformations, Transformations> transformations_pipeline(
-    &transformations, &transformations, bound_position * move,
-    IndexedBy::OFFSET);
+      &transformations,
+      &transformations,
+      Transformations::Reader(IndexedBy::OFFSET),
+      Transformations::Writer{}, bind_position * move);
 
   WindowTimer fps(60);
   uint64_t frame = 0;
@@ -138,63 +148,7 @@ int main() {
 }
 #endif
 
-struct Position {
-  float x, y;
-};
-
-typedef radiance::Schema<uint32_t, Position> PositionSchema;
-typedef PositionSchema::Table Positions;
-
 int main() {
-  Positions positions;
-  uint32_t entity_count = 10000;
-  for (uint32_t i = 0; i < entity_count; ++i) {
-    positions.insert(i, { (float)(rand() % 1000), (float)(rand() % 1000)});
-  }
-
-  auto system_1 = radiance::System([](radiance::Frame* frame) {
-    auto* el = frame->result<Positions::Element>();
-    ++el->component.x;
-    --el->component.y;
-  });
-
-  auto system_2 = radiance::System([](radiance::Frame* frame) {
-    auto* el = frame->result<Positions::Element>();
-    ++el->component.x;
-    ++el->component.y;
-  });
-
-  auto system_3 = radiance::System([](radiance::Frame* frame) {
-    auto* el = frame->result<Positions::Element>();
-    --el->component.x;
-    --el->component.y;
-  });
-
-  auto system = system_1 * system_2 * system_3;
-  
-  WindowTimer fps(60);
-  uint64_t frame = 0;
-  uint32_t max_iterations = 10000;
-  while (frame < max_iterations) {
-    fps.start();
-
-    radiance::Pipeline<Positions, Positions>::run(
-        &positions,
-        &positions,
-        system,
-        radiance::IndexedBy::OFFSET
-    );
-    
-    fps.stop();
-    fps.step();
-
-    ++frame;
-  }
-  for (auto& c : positions.components) {
-    std::cout << "(" << c.x << ", " << c.y << ")\r";
-  }
-  std::cout << "Throughput = "
-    << (int)((1000 * entity_count) / (fps.get_avg_elapsed_ns()/1e6))
-    << "[entity/s]\n";
-  return 0;
+  Benchmark benchmark(10000);
+  benchmark.run();
 }

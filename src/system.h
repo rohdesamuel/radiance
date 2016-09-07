@@ -92,6 +92,13 @@ public:
       my_system(frame);
     });
   }
+
+  template<class F, class... State>
+  static System compile(F f, State... state) {
+    return [=](Frame* frame) {
+      return f(frame, state...);
+    };
+  }
 };
 
 typedef std::list<std::function<void(void)>> SystemQueue;
