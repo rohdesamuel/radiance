@@ -16,12 +16,16 @@
 namespace radiance
 {
 
-template<class Key, class Component, class Allocator = std::allocator<Component>>
+template<class Key_, class Component_,
+         class Allocator_ = std::allocator<Component_>>
 struct Schema {
-  typedef radiance::Table<Key, Component, Allocator> Table;
+  typedef radiance::Table<Key_, Component_, Allocator_> Table;
   typedef radiance::View<Table> View;
   typedef typename Table::Mutation Mutation;
+  typedef typename Table::Element Element;
   typedef radiance::MutationQueue<Table> MutationQueue;
+  typedef Key_ Key;
+  typedef Component_ Component;
 
   static std::function<void(SystemQueue&&)> make_system_queue() {
     return [](SystemQueue&& queue) {

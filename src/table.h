@@ -18,6 +18,7 @@
 
 #include "common.h"
 #include "system.h"
+#include "operators.h"
 
 namespace radiance
 {
@@ -85,6 +86,10 @@ public:
   public:
     Reader(IndexedBy indexed_by): indexed_by_(indexed_by) {}
 
+    constexpr bool is_thread_safe() {
+      return true;
+    }
+
     template<class System>
     void operator()(Table* table, System system) const {
       read(table, system, indexed_by_);
@@ -131,6 +136,10 @@ public:
 
   class Writer {
   public:
+    constexpr bool is_thread_safe() {
+      return false;
+    }
+
     static void write(Table* table, Frame* frame) {
       Element* el = frame->result<Element>();
       switch (el->indexed_by) {
@@ -277,6 +286,10 @@ public:
   public:
     Reader(IndexedBy indexed_by): indexed_by_(indexed_by) {}
 
+    constexpr bool is_thread_safe() {
+      return true;
+    }
+
     template<class System>
     void operator()(View* view, System system) const {
       read(view, system, indexed_by_);
@@ -346,38 +359,40 @@ template<class Table>
 class MutationQueue {
 public:
   typedef typename Table::Mutation Mutation;
+  typedef Mutation Element;
 
   const uint64_t INITIAL_SIZE = 4096;
 
   MutationQueue() : mutations_(INITIAL_SIZE) {}
 
-  const std::function<void(Table*, Mutation&&)> default_resolver = [=](Table* table, Mutation m) {
-    switch (m.mutate_by) {
-      case MutateBy::INSERT:
-        table->insert(std::move(m.el.key), std::move(m.el.component));
-        break;
-      case MutateBy::REMOVE:
-        table->remove(table->find(m.el.key));
-        break;
-      case MutateBy::WRITE:
-        switch (m.el.indexed_by) {
-          case IndexedBy::HANDLE:
-            (*table)[m.el.handle] = std::move(m.el.component);
+  const std::function<void(Table*, Mutation&&)> default_resolver = 
+    [=](Table* table, Mutation m) {
+        switch (m.mutate_by) {
+          case MutateBy::INSERT:
+            table->insert(std::move(m.el.key), std::move(m.el.component));
             break;
-          case IndexedBy::KEY:
-            table->components[table->find(m.el.key)] = std::move(m.el.component);
+          case MutateBy::REMOVE:
+            table->remove(table->find(m.el.key));
             break;
-          case IndexedBy::OFFSET:
-            table->components[m.el.offset] = std::move(m.el.component);
+          case MutateBy::WRITE:
+            switch (m.el.indexed_by) {
+              case IndexedBy::HANDLE:
+                (*table)[m.el.handle] = std::move(m.el.component);
+                break;
+              case IndexedBy::KEY:
+                table->components[table->find(m.el.key)] = std::move(m.el.component);
+                break;
+              case IndexedBy::OFFSET:
+                table->components[m.el.offset] = std::move(m.el.component);
+                break;
+              default:
+                break;
+            }
             break;
           default:
             break;
         }
-        break;
-      default:
-        break;
-    }
-  };
+      };
 
   bool push(Mutation&& m) {
     return mutations_.push(m);
@@ -385,7 +400,13 @@ public:
 
   template<MutateBy mutate_by, IndexedBy indexed_by, class IndexType>
   void emplace(IndexType&& index, typename Table::Component&& component) {
-    push(Mutation{ mutate_by,{ indexed_by, std::move(index), std::move(component) } });
+    push(Mutation { 
+           mutate_by, {
+             indexed_by,
+             std::move(index),
+             std::move(component) 
+           }
+         });
   }
 
   uint64_t flush(Table* table) {
@@ -401,10 +422,26 @@ public:
     });
   }
 
+  class Writer {
+  public:
+    constexpr bool is_thread_safe() {
+      return true;
+    }
+
+    static void write(MutationQueue* queue, Frame* frame) {
+      Element* el = frame->result<Element>();
+      queue->push(std::move(*el));
+    }
+
+    void operator()(MutationQueue* queue, Frame* frame) const {
+      write(queue, frame);
+    }
+  };
+
 private:
   ::boost::lockfree::queue<Mutation> mutations_;
 };
 
-}
+}  // namespace radiance
 
 #endif
