@@ -15,6 +15,7 @@
 #include <boost/container/map.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/container/vector.hpp>
+#include <iostream>
 
 #include "common.h"
 #include "system.h"
@@ -73,7 +74,7 @@ public:
       insert(std::move(std::get<0>(t)), std::move(std::get<1>(t)));
     }
   }
-  
+
   struct Mutation {
     MutateBy mutate_by;
     BaseElement<Key, Component> el;
@@ -83,50 +84,83 @@ public:
   private:
     IndexedBy indexed_by_;
 
+    static void iterate_table(Table* table, SystemExecutor& system,
+                              std::function<Element(Table*, int64_t)> reader) {
+      auto it = system.begin();
+      auto end = system.end();
+      std::vector<Frame> frames;
+      if (table->size() > frames.size()) {
+        frames.resize(table->size());
+      }
+
+      do {
+//#pragma omp parallel for
+        for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
+          Frame& frame = frames[i];
+          if (it == system.begin()) {
+            frame.clear();
+            frame.result(reader(table, i));
+          }
+          (it->system)(&frame);
+        }
+        ++it;
+      } while(it != end);
+
+//#pragma omp parallel for
+      for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
+        Frame& frame = frames[i];
+        (system.back())(&frame);
+        frame.clear();
+      }
+    }
+
+    inline static Element get_by_offset(Table* table, int64_t index) {
+      return {
+        IndexedBy::OFFSET,
+        (Offset)index,
+        table->component(index)
+      };
+    }
+
+    inline static Element get_by_handle(Table* table, int64_t index) {
+      return {
+        IndexedBy::HANDLE,
+        (Handle)table->find(table->key(index)),
+        table->component(index)
+      };
+    }
+
+    inline static Element get_by_key(Table* table, int64_t index) {
+      return {
+        IndexedBy::KEY,
+        (Key)table->key(index),
+        table->component(index)
+      };
+    }
+
   public:
+    Reader(): indexed_by_(IndexedBy::UNKNOWN) {};
     Reader(IndexedBy indexed_by): indexed_by_(indexed_by) {}
 
     constexpr bool is_thread_safe() {
       return true;
     }
 
-    template<class System>
-    void operator()(Table* table, System system) const {
+    void operator()(Table* table, SystemExecutor& system) const {
       read(table, system, indexed_by_);
     }
 
-    template<class System>
-    static void read(Table* table, System system, IndexedBy indexed_by) {
+    static void read(Table* table, SystemExecutor& system,
+                     IndexedBy indexed_by) {
       switch (indexed_by) {
-        case IndexedBy::OFFSET:
-          for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
-            thread_local static Frame frame;
-            frame.clear();
-            frame.result(Element{ indexed_by, (Offset)i, table->component(i) });
-            system(&frame);
-          }
+        case IndexedBy::OFFSET: 
+          iterate_table(table, system, get_by_offset);
           break;
         case IndexedBy::HANDLE:
-          for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
-            thread_local static Frame frame;
-            frame.clear();
-            frame.result(
-                Element{
-                  indexed_by,
-                  (Handle)table->find(table->key(i)),
-                  table->component(i)
-                });
-            system(&frame);
-          }
+          iterate_table(table, system, get_by_handle);
           break;
         case IndexedBy::KEY:
-          for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
-            thread_local static Frame frame;
-            frame.clear();
-            frame.result(
-                Element{ indexed_by, (Key)table->key(i), table->component(i) });
-            system(&frame);
-          }
+          iterate_table(table, system, get_by_key);
           break;
         case IndexedBy::UNKNOWN:
           break;
@@ -136,6 +170,8 @@ public:
 
   class Writer {
   public:
+    Writer() {}
+    
     constexpr bool is_thread_safe() {
       return false;
     }
@@ -144,7 +180,7 @@ public:
       Element* el = frame->result<Element>();
       switch (el->indexed_by) {
         case IndexedBy::OFFSET:
-          table->component(el->offset) = std::move(el->component);
+          table->components[el->offset] = std::move(el->component);
           break;
         case IndexedBy::HANDLE:
           (*table)[el->handle] = std::move(el->component);
@@ -283,44 +319,75 @@ public:
   private:
     IndexedBy indexed_by_;
 
+    static void iterate_view(View* view, SystemExecutor& system,
+                             std::function<Element(View*, int64_t)> reader) {
+      auto it = system.begin();
+      do {
+#pragma omp parallel for
+        for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
+          thread_local static std::vector<Frame> frames;
+          if (view->size() > frames.size()) {
+            frames.resize(view->size());
+          }
+          Frame& frame = frames[i];
+          if (i == 0) {
+            frame.clear();
+          }
+
+          frame.result(reader(view, i));
+          (it->system)(&frame);
+        }
+        ++it;
+      }
+      while (it != system.end());
+    }
+
+    inline static Element get_by_offset(View* view, int64_t index) {
+      return {
+        IndexedBy::OFFSET,
+        (Offset)index,
+        view->component(index)
+      };
+    }
+
+    inline static Element get_by_handle(View* view, int64_t index) {
+      return {
+        IndexedBy::HANDLE,
+        (Handle)view->find(view->key(index)),
+        view->component(index)
+      };
+    }
+
+    inline static Element get_by_key(View* view, int64_t index) {
+      return {
+        IndexedBy::KEY,
+        (typename Table::Key)view->key(index),
+        view->component(index)
+      };
+    }
+
   public:
+    Reader(): indexed_by_(IndexedBy::UNKNOWN) {}
     Reader(IndexedBy indexed_by): indexed_by_(indexed_by) {}
 
     constexpr bool is_thread_safe() {
       return true;
     }
 
-    template<class System>
-    void operator()(View* view, System system) const {
+    void operator()(View* view, SystemExecutor& system) const {
       read(view, system, indexed_by_);
     }
 
-    template<class System>
-    static void read(View* view, System system, IndexedBy indexed_by) {
+    static void read(View* view, SystemExecutor& system, IndexedBy indexed_by) {
       switch (indexed_by) {
         case IndexedBy::OFFSET:
-          for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
-            thread_local static Frame frame;
-            frame.clear();
-            frame.result(Element{ indexed_by, (Offset)i, view->component(i) });
-            system(&frame);
-          }
+          iterate_view(view, system, &get_by_offset);
           break;
         case IndexedBy::HANDLE:
-          for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
-            thread_local static Frame frame;
-            frame.clear();
-            frame.result(Element{ indexed_by, (Handle)view->find(view->key(i)), view->component(i) });
-            system(&frame);
-          }
+          iterate_view(view, system, &get_by_handle);
           break;
         case IndexedBy::KEY:
-          for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
-            thread_local static Frame frame;
-            frame.clear();
-            frame.result(Element{ indexed_by, (typename Table::Key)view->key(i), view->component(i) });
-            system(&frame);
-          }
+          iterate_view(view, system, &get_by_key);
           break;
         case IndexedBy::UNKNOWN:
           break;
@@ -356,14 +423,14 @@ private:
 };
 
 template<class Table>
-class MutationQueue {
+class MutationBuffer {
 public:
   typedef typename Table::Mutation Mutation;
   typedef Mutation Element;
 
   const uint64_t INITIAL_SIZE = 4096;
 
-  MutationQueue() : mutations_(INITIAL_SIZE) {}
+  MutationBuffer() : mutations_(INITIAL_SIZE) {}
 
   const std::function<void(Table*, Mutation&&)> default_resolver = 
     [=](Table* table, Mutation m) {
@@ -428,12 +495,12 @@ public:
       return true;
     }
 
-    static void write(MutationQueue* queue, Frame* frame) {
+    static void write(MutationBuffer* queue, Frame* frame) {
       Element* el = frame->result<Element>();
       queue->push(std::move(*el));
     }
 
-    void operator()(MutationQueue* queue, Frame* frame) const {
+    void operator()(MutationBuffer* queue, Frame* frame) const {
       write(queue, frame);
     }
   };

@@ -15,9 +15,16 @@
 
 #include <SDL2/SDL.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <boost/unordered_map.hpp>
+
 #define GL3_PROTOTYPES 1
 #include <GL/glew.h>
+#include <GL/glu.h>
 
+#define __ENGINE_DEBUG__
 #include "radiance.h"
 
 #include "timer.h"
@@ -26,17 +33,36 @@
 #include "component.h"
 #include "benchmark.h"
 
-int main() {
-  SDL_Window* window = nullptr;
-  SDL_GLContext context = nullptr;
+namespace radiance
+{
 
+Status init_opengl() {
+  glewExperimental = GL_TRUE;
+  GLenum glewError = glewInit();
+  if (glewError != 0) {
+    std::cout << "Failed to intialize Glew\n"
+              << "Error code: " << glewError;
+    return Status::FAILED_INITIALIZATION;
+  }
+
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+                      SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+  SDL_GL_SetSwapInterval(1);
+  return Status::OK;
+}
+
+Status init_sdl(SDL_Window** window, SDL_GLContext* context) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     std::cout << "Failed to initialize SDL2\n"
               << SDL_GetError();
-    return 2;
+    return Status::FAILED_INITIALIZATION;
   }
 
-  window = SDL_CreateWindow(
+  *window = SDL_CreateWindow(
       "Demo",
       SDL_WINDOWPOS_UNDEFINED,
       SDL_WINDOWPOS_UNDEFINED,
@@ -47,27 +73,158 @@ int main() {
   if (!window) {
     std::cout << "Failed to create window\n"
               << SDL_GetError();
-    return 3;
+    return Status::FAILED_INITIALIZATION;
   }
 
-  context = SDL_GL_CreateContext(window);
-  
-  glewExperimental = GL_TRUE;
-  GLenum glewError = glewInit();
-  if (glewError != 0) {
-    std::cout << "Failed to intialize Glew\n"
-              << "Error code: " << glewError;
-    return 1;
+  *context = SDL_GL_CreateContext(*window);
+  return Status::OK;
+}
+
+
+
+}  // namespace radiance
+#if 0
+namespace program {
+using namespace radiance;
+class Program {
+ public:
+  struct Transformation {
+    glm::vec3 p;
+    glm::vec3 v;
+  };
+  typedef ::boost::container::vector<std::tuple<Handle, float>> Spring;
+  typedef Schema<Handle, Spring> Springs;
+  typedef Schema<Entity, Transformation> Transformations;
+
+  typedef Pipeline<typename Springs::View, typename Transformations::Table>
+      SpringsPipeline;
+
+  typedef Pipeline<typename Transformations::Table, typename Transformations::Table>
+      TransformationsPipeline;
+
+  Program():
+      springs_view(&springs),
+      transformations_view(&transformations) {
+    spring = System(&spring_system, std::ref(transformations_view));
+    move = System(&move_system);
+    bind_position = System(bind_position_system, 1.0f, -1.0f, -1.0f, 1.0f);
+
+    springs_pipeline = SpringsPipeline(
+          &springs_view,
+          &transformations,
+          {radiance::IndexedBy::KEY},
+          {}, spring);
+
+    transformations_pipeline = TransformationsPipeline(
+          &transformations,
+          &transformations,
+          {radiance::IndexedBy::OFFSET},
+          {}, bind_position * move);
   }
 
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
-                      SDL_GL_CONTEXT_PROFILE_CORE);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  static void spring_system(
+      Frame* frame, Transformations::View& transformations_view) {
+    auto* el = frame->result<Springs::View::Element>();
 
-  SDL_GL_SetSwapInterval(1);
-  
+    Handle handle = el->key;
+    Transformation accum = transformations_view[handle];
+
+    for (const auto& connection : el->component) {
+      const Handle& other = std::get<0>(connection);
+      const float& spring_k = std::get<1>(connection);
+      glm::vec3 r = transformations_view[other].p - accum.p;
+      if (glm::length(r) < 0.05f) {
+        accum.v -= r * spring_k * 1.1f;
+      }
+      if (glm::length(r) < 0.2f) {
+        accum.v += r * spring_k;
+        accum.v *= 0.99999f;
+      }
+    }
+    
+    frame->result(Transformations::Element{IndexedBy::HANDLE , handle, accum});
+  }
+
+  static void move_system(Frame* frame) {
+    auto* el = frame->result<Transformations::Element>();
+
+    /*float l = el->component.v.length();
+    el->component.v /= el->component.v.length();
+    el->component.v *= std::min(l, 0.5f);*/
+    el->component.p += el->component.v;
+  }
+
+  static void bind_position_system(
+      Frame* frame, float top, float left, float bottom, float right) {
+    auto* el = frame->result<Transformations::Element>();
+    if (el->component.p.x <= left || el->component.p.x >= right) {
+      /*el->component.p.x = std::min(
+          std::max(el->component.p.x, left), (float)(right));*/
+      el->component.v.x *= 1.0f;
+    }
+
+    if (el->component.p.y <= bottom || el->component.p.y >= top) {
+      /*el->component.p.y = std::min(
+          std::max(el->component.p.y, bottom), (float)(top));*/
+      el->component.v.y *= 1.0f;
+    }
+
+    if (el->component.p.z <= bottom || el->component.p.z >= top) {
+      /*
+      el->component.p.z = std::min(
+          std::max(el->component.p.z, bottom), (float)(top));*/
+      el->component.v.z *= 1.0f;
+    }
+  }
+
+  System spring;
+  System move;
+  System bind_position;
+
+  SpringsPipeline springs_pipeline;
+  TransformationsPipeline transformations_pipeline;
+
+  Springs::Table springs;
+  Springs::View springs_view;
+  Transformations::Table transformations;
+  Transformations::View transformations_view;
+};
+}  // namespace program
+
+GLuint compile_shader(const char* program, GLenum shader_type) {
+  GLuint s = glCreateShader(shader_type);
+  glShaderSource(s, 1, &program, nullptr);
+  glCompileShader(s);
+  GLint success = 0;
+  glGetShaderiv(s, GL_COMPILE_STATUS, &success);
+  if (success == GL_FALSE) {
+    GLint log_size = 0;
+    glGetShaderiv(s, GL_INFO_LOG_LENGTH, &log_size);
+    char* error = new char[log_size];
+    glGetShaderInfoLog(s, log_size, &log_size, error);
+
+    std::cout << "Error in shader compilation: " << error << std::endl;
+    std::cout << "Shader program: \n" << program;
+    delete[] error;
+    exit(1);
+  }
+  return s;
+}
+
+void glPrintIfError() {
+  GLenum error = glGetError();
+  if (error) {
+    std::cout << "Error: " << error << std::endl;
+  }
+}
+
+int main() {
+  SDL_Window* window = nullptr;
+  SDL_GLContext context = nullptr;
+
+  radiance::init_sdl(&window, &context);
+  radiance::init_opengl();  
+
   GLuint triangle;
   glGenVertexArrays(1, &triangle);
   glBindVertexArray(triangle);
@@ -78,6 +235,7 @@ int main() {
     -0.5f, -0.5f, 0.0f,
   };
 
+
   GLuint vertex_buffer;
   glGenBuffers(1, &vertex_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
@@ -87,8 +245,9 @@ int main() {
   const char* vertex_shader =
       "#version 130\n"
       "in vec3 vp;"
+      "uniform mat4 projection_view;"
       "void main() {"
-      "  gl_Position = vec4(vp, 1.0);"
+      "  gl_Position = projection_view * vec4(vp, 1.0);"
       "}";
 
   const char* fragment_shader =
@@ -98,81 +257,147 @@ int main() {
       "  frag_color = vec4(1.0, 0.0, 0.0, 1.0);"
       "}";
 
-  GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-  {
-    glShaderSource(vs, 1, &vertex_shader, nullptr);
-    glCompileShader(vs);
-    GLint success = 0;
-    glGetShaderiv(vs, GL_COMPILE_STATUS, &success);
-    if (success == GL_FALSE) {
-      GLint log_size = 0;
-      glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &log_size);
-      char* error = new char[log_size];
+  GLuint vs = compile_shader(vertex_shader, GL_VERTEX_SHADER);
+  GLuint fs = compile_shader(fragment_shader, GL_FRAGMENT_SHADER);
 
-      glGetShaderInfoLog(vs, log_size, &log_size, error);
-      std::cout << "Error in vertex shader compilation: " << error << std::endl;
-      delete[] error;
-    }
-  }
-
-  GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-  {
-    glShaderSource(fs, 1, &fragment_shader, nullptr);
-    glCompileShader(fs);
-    GLint success = 0;
-    glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
-    if (success == GL_FALSE) {
-      GLint log_size = 0;
-      glGetShaderiv(vs, GL_INFO_LOG_LENGTH, &log_size);
-      char* error = new char[log_size];
-
-      glGetShaderInfoLog(vs, log_size, &log_size, error);
-      std::cout << "Error in fragment shader compilation: " << error << std::endl;
-      delete[] error;
-    }
-  }
+  glm::vec3 camera_center = {1.4, 0.8, 1.4};
+  glm::vec3 camera_eye = {0, 0, 0};
+  glm::vec3 camera_direction = glm::normalize(camera_eye - camera_center);
+  glm::vec3 up = glm::normalize(glm::vec3{0, 0, 1});
+  glm::vec3 camera_right = glm::cross(up, camera_direction);
+  glm::vec3 camera_up = glm::cross(camera_direction, camera_right);
+  glm::mat4 view = glm::lookAt(camera_center, camera_eye, camera_up);
+  glm::mat4 projection = glm::perspective(
+      glm::radians(90.0f),
+      (float)640 / (float)480,
+      0.1f,
+      50.0f);
+  glm::mat4 projection_view = projection * view;
 
   GLuint shader_program = glCreateProgram();
+
   glAttachShader(shader_program, fs);
   glAttachShader(shader_program, vs);
   glLinkProgram(shader_program);
 
-  glClearColor(0.0, 1.0, 0.0, 1.0);
+  glClearColor(0.0, 0.0, 0.0, 1.0);
+
+  uint64_t count = 2500;
+
+  program::Program p;
+
+  srand((uint32_t)time(NULL));
+  for (uint64_t i = 0; i < count; ++i) {
+    float x = 2 * (((GLfloat)(rand() % 10000) / 10000.0f) - 0.5f);
+    float y = 2 * (((GLfloat)(rand() % 10000) / 10000.0f) - 0.5f);
+    float z = 2 * (((GLfloat)(rand() % 10000) / 10000.0f) - 0.5f);
+    glm::vec3 pos = {x, y, z};
+    glm::vec3 vel = {0, 0, 0};
+    p.transformations.insert(i, program::Program::Transformation{pos, vel});
+  }
+  for (uint64_t i = 0; i < count; ++i) {
+    program::Program::Springs::Component springs_list;
+    for (uint64_t j = 0; j < count; ++j) {
+      if (i != j) {
+        springs_list.push_back(std::tuple<radiance::Handle, float>{j, 0.0001f});
+      }
+    }
+    p.springs.insert(i, std::move(springs_list));
+  }
+
+  GLuint points_buffer;
+  glGenBuffers(1, &points_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, points_buffer);
+  glBufferData(
+      GL_ARRAY_BUFFER,
+      p.transformations.components.size() * sizeof(program::Program::Transformation),
+      p.transformations.components.data(), GL_DYNAMIC_DRAW);
+
   bool running = true;
+  uint64_t frame = 0;
+  float camera_dir = 0;
+  float camera_rad = 2.0f;
+  float camera_zdir = 0;
+
+  WindowTimer fps(60);
   while(running) {
+    fps.start();
+    p.transformations_pipeline();
+    p.springs_pipeline();
+
+    static glm::vec2 mouse_pos;
+    static glm::vec2 mouse_delta;
+
+    fps.stop();
+    fps.step();
+
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(shader_program);
+
+    camera_center = glm::vec3{
+      camera_rad * glm::cos(glm::radians(camera_dir)) * glm::sin(glm::radians(camera_zdir)),
+      camera_rad * glm::sin(glm::radians(camera_dir)) * glm::sin(glm::radians(camera_zdir)),
+      camera_rad * glm::cos(glm::radians(camera_zdir))
+    };
+
+    camera_direction = glm::normalize(camera_eye - camera_center);
+    camera_right = glm::cross(up, camera_direction);
+    camera_up = glm::cross(camera_direction, camera_right);
+    view = glm::lookAt(camera_center, camera_eye, camera_up);
+
+    projection_view = projection * view;
+    GLuint projection_view_id = glGetUniformLocation(
+        shader_program, "projection_view");
+    glUniformMatrix4fv(projection_view_id, 1, GL_FALSE, &projection_view[0][0]);
+
+    glBindBuffer(GL_ARRAY_BUFFER, points_buffer);
+    glBufferSubData(
+        GL_ARRAY_BUFFER, 0,
+        p.transformations.size() * sizeof(program::Program::Transformation),
+        p.transformations.components.data());
+
+    glEnableClientState(GL_VERTEX_ARRAY);
+
+    // 3 for 3 dimensions.
+    glVertexPointer(3, GL_FLOAT, sizeof(program::Program::Transformation), (void*)(0));
+    glDrawArrays(GL_POINTS, 0, p.transformations.size());
+    glDisableClientState(GL_VERTEX_ARRAY);
+
     SDL_Event event;
     while(SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        running = false;
+      switch(event.type) {
+        case SDL_QUIT:
+          running = false;
+          break;
+        case SDL_KEYDOWN:
+          switch (event.key.keysym.sym) {
+            case SDLK_ESCAPE:
+              running = false;
+              break;
+          }
+          break;
+        case SDL_MOUSEMOTION:
+          glm::vec2 pos = {event.motion.x, event.motion.y};
+          mouse_delta = pos - mouse_pos;
+          mouse_pos = pos;
+          camera_dir += mouse_delta.x;
+          camera_zdir += mouse_delta.y;
+          break;
       }
-
-      if (event.type == SDL_KEYDOWN) {
-        switch (event.key.keysym.sym) {
-          case SDLK_ESCAPE:
-            running = false;
-            break;
-        }
-      }
-
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      glUseProgram(shader_program);
-
-      glEnableVertexAttribArray(0);
-      glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-      glVertexAttribPointer(
-          0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-
-      glDrawArrays(GL_TRIANGLES, 0, 3);
-      glDisableVertexAttribArray(0);
-
-      SDL_GL_SwapWindow(window);
 
       GLenum error = glGetError();
       if (error) {
-        std::cout << "Error: " << error << std::endl;
+        const GLubyte* error_str = gluErrorString(error);
+        std::cout << "Error(" << error << "): " << error_str << std::endl;
       }
     }
+    SDL_GL_SwapWindow(window);
+    ++frame;
+    printf("%.2ffps           \r", 1e9 / fps.get_avg_elapsed_ns());
   }
+
+  glDeleteBuffers(1, &points_buffer);
+  glDeleteBuffers(1, &vertex_buffer);
 
   SDL_GL_DeleteContext(context);
   SDL_DestroyWindow(window);
@@ -180,7 +405,7 @@ int main() {
 
   return 0;
 }
-
+#endif
 #if 0
 using namespace radiance;
 
@@ -229,7 +454,7 @@ int main() {
     el->component.p += el->component.v;
   });
 
-  Transformations::MutationQueue transformations_queue;
+  Transformations::MutationBuffer transformations_queue;
 
   uint64_t count = 1000;
 
@@ -283,7 +508,7 @@ int main() {
     el->component.p += el->component.v;
   });
 
-  auto bind_position = System::compile(
+  auto bind_position = System(
     [](Frame* frame, int max_width, int max_height) {
       auto* el = frame->result<Transformations::Element>();
 
@@ -336,9 +561,9 @@ int main() {
   while (1);
 }
 #endif
-#if 0
+#if 1
 int main() {
-  Benchmark benchmark(10000);
+  Benchmark benchmark(10);
   benchmark.run();
 }
 #endif

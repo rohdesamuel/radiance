@@ -8,6 +8,7 @@
 #ifndef RADIANCE__H
 #define RADIANCE__H
 
+#include "component.h"
 #include "memory.h"
 #include "pipeline.h"
 #include "schema.h"

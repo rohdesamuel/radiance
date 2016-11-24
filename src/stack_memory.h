@@ -9,6 +9,7 @@
 #define STACK_MEMORY__H
 
 #include "common.h"
+#include <memory.h>
 
 namespace radiance
 {
@@ -33,7 +34,7 @@ public:
       top_ += type_size;
     }
 
-    DEBUG_ASSERT(ret, error::Codes::MEMORY_OUT_OF_BOUNDS);
+    DEBUG_ASSERT(ret, Status::Code::MEMORY_OUT_OF_BOUNDS);
     return ret;
   }
 

@@ -21,7 +21,10 @@
 #ifdef __ENGINE_DEBUG__
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
+
+#ifdef __COMPILE_AS_WINDOWS__
 #include <crtdbg.h>
+#endif
 
 #define DEBUG_ASSERT(expr, exit_code) \
 do{ if (!(expr)) exit(exit_code); } while (0)
@@ -64,20 +67,33 @@ struct __CACHE_ALIGNED__ CacheAlligned {
 typedef int64_t Handle;
 typedef int64_t Offset;
 typedef int64_t Entity;
+typedef int32_t Family;
 typedef int64_t Id;
 
-namespace error
-{
+struct Status {
+  enum Code {
+    OK = 0,
+    MEMORY_LEAK,
+    MEMORY_OUT_OF_BOUNDS,
+    NULL_POINTER,
+    UNKNOWN_INDEXED_BY_VALUE,
+    FAILED_INITIALIZATION
+  };
 
-enum Codes {
-  OK = 0,
-  MEMORY_LEAK,
-  MEMORY_OUT_OF_BOUNDS,
-  NULL_POINTER,
-  UNKNOWN_INDEXED_BY_VALUE
+  Status(Code code=Code::OK, const char* message=""):
+      code(code),
+      message(message) { }
+
+
+  Code code;
+  const char* message;
+
+  operator bool() {
+    return code == Code::OK;
+  }
 };
 
-}
+using std::size_t;
 
 }
 

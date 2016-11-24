@@ -23,17 +23,9 @@ struct Schema {
   typedef radiance::View<Table> View;
   typedef typename Table::Mutation Mutation;
   typedef typename Table::Element Element;
-  typedef radiance::MutationQueue<Table> MutationQueue;
+  typedef radiance::MutationBuffer<Table> MutationBuffer;
   typedef Key_ Key;
   typedef Component_ Component;
-
-  static std::function<void(SystemQueue&&)> make_system_queue() {
-    return [](SystemQueue&& queue) {
-      for (auto& system : queue) {
-        system();
-      }
-    };
-  }
 };
 
 }

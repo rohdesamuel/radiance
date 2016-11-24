@@ -21,9 +21,10 @@ public:
   static void transform_3(radiance::Frame* frame);
 
 private:
+  radiance::Pipeline<Positions, Positions> runner_;
   Positions positions_;
-  radiance::System benchmark_system_;
-  uint32_t entity_count_;
+  radiance::SystemList benchmark_system_;
+  uint32_t entity_count_ = 0;
 };
 
 #endif
