@@ -3,9 +3,10 @@
 
 ### Contents
 
+1. [Dependencies](#dependencies)
+2. [Design](#design)
 
-
-## Dependencies<a name="dependencies"/>
+## Dependencies
 ```
 sudo apt-get install libsdl2-2.0
 sudo apt-get install libsdl2-dev
