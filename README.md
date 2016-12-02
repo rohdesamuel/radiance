@@ -1,17 +1,18 @@
 # Radiance
 **Radianace** is a custom-made game framework written in C++. Its goal is to share and experiment with different performant and cache-aware algorithms in a simple game library. It currently provides a low-level interface for creating objects and executing operations over them. Future iterations will include a full object typing system, syntactic sugar, physics, sound, user input, display, and all the other fun goodies game frameworks usually have!
 
-### Contents
+## Main Features
 
-1. [Dependencies](#dependencies)
-2. [Design](#design)
+### Installation
 
-## Dependencies
+#### Dependencies
+
 ```
 sudo apt-get install libsdl2-2.0
 sudo apt-get install libsdl2-dev
 sudo apt-get install libglew-dev
 ```
+
 ## Design
 
 ### Source
