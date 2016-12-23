@@ -1,4 +1,7 @@
 #include "component.h"
+namespace radiance {
+  Id CounterBase::counter_ = 0;
+}
 #if 0
 namespace radiance {
 

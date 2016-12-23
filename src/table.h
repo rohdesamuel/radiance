@@ -18,6 +18,7 @@
 #include <iostream>
 
 #include "common.h"
+#include "component.h"
 #include "system.h"
 #include "operators.h"
 
@@ -85,33 +86,46 @@ public:
     IndexedBy indexed_by_;
 
     static void iterate_table(Table* table, SystemExecutor& system,
-                              std::function<Element(Table*, int64_t)> reader) {
-      auto it = system.begin();
-      auto end = system.end();
-      std::vector<Frame> frames;
-      if (table->size() > frames.size()) {
-        frames.resize(table->size());
+                              std::function<Element(Table*, int64_t)>&& reader) {
+#if 1
+#pragma omp parallel for
+      for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
+        thread_local static Frame frame;
+        frame.clear();
+        frame.result(reader(table, i));
+        system(&frame);
       }
+#else
+#pragma omp parallel
+      {
+        auto it = system.begin();
+        auto end = system.end();
+        thread_local static std::vector<Frame> frames;
+        if (table->size() > frames.size()) {
+          frames.resize(table->size());
+        }
 
-      do {
-//#pragma omp parallel for
+        do {
+          System& sys = it->system;
+#pragma omp parallel for
+          for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
+            Frame& frame = frames[i];
+            if (it == system.begin()) {
+              frame.clear();
+              frame.result(reader(table, i));
+            }
+            sys(&frame);
+          }
+          ++it;
+        } while(it != end);
+
+#pragma omp parallel for
         for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
           Frame& frame = frames[i];
-          if (it == system.begin()) {
-            frame.clear();
-            frame.result(reader(table, i));
-          }
-          (it->system)(&frame);
+          (system.back())(&frame);
         }
-        ++it;
-      } while(it != end);
-
-//#pragma omp parallel for
-      for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
-        Frame& frame = frames[i];
-        (system.back())(&frame);
-        frame.clear();
       }
+#endif
     }
 
     inline static Element get_by_offset(Table* table, int64_t index) {
@@ -321,9 +335,46 @@ public:
 
     static void iterate_view(View* view, SystemExecutor& system,
                              std::function<Element(View*, int64_t)> reader) {
-      auto it = system.begin();
-      do {
+#if 0
 #pragma omp parallel for
+      for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
+        thread_local static Frame frame;
+        frame.clear();
+        frame.result(reader(view, i));
+        system(&frame);
+      }
+#else
+      {
+        auto it = system.begin();
+        auto end = system.end();
+        static std::vector<Frame> frames;
+        if (view->size() > frames.size()) {
+          frames.resize(view->size());
+        }
+
+        do {
+          System& sys = it->system;
+#pragma omp parallel for
+          for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
+            Frame& frame = frames[i];
+            if (it == system.begin()) {
+              frame.clear();
+              frame.result(reader(view, i));
+            }
+            sys(&frame);
+          }
+          ++it;
+        } while(it != end);
+
+        for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
+          Frame& frame = frames[i];
+          (system.back())(&frame);
+        }
+      }
+#endif
+/*      auto it = system.begin();
+      do {
+//#pragma omp parallel for
         for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
           thread_local static std::vector<Frame> frames;
           if (view->size() > frames.size()) {
@@ -339,7 +390,7 @@ public:
         }
         ++it;
       }
-      while (it != system.end());
+      while (it != system.end());*/
     }
 
     inline static Element get_by_offset(View* view, int64_t index) {
@@ -428,12 +479,12 @@ public:
   typedef typename Table::Mutation Mutation;
   typedef Mutation Element;
 
-  const uint64_t INITIAL_SIZE = 4096;
+  const uint64_t INITIAL_SIZE = 1 << 10;
 
   MutationBuffer() : mutations_(INITIAL_SIZE) {}
 
   const std::function<void(Table*, Mutation&&)> default_resolver = 
-    [=](Table* table, Mutation m) {
+    [=](Table* table, Mutation&& m) {
         switch (m.mutate_by) {
           case MutateBy::INSERT:
             table->insert(std::move(m.el.key), std::move(m.el.component));
@@ -477,7 +528,7 @@ public:
   }
 
   uint64_t flush(Table* table) {
-    return mutations_.consume_all([=](Mutation m) {
+    return mutations_.consume_all([&](Mutation& m) {
       default_resolver(table, std::move(m));
     });
   }

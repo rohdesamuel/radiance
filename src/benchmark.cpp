@@ -1,5 +1,6 @@
 #include <string.h>
 #include <iostream>
+#include <omp.h>
     
 #include "benchmark.h"
 #include "timer.h"
@@ -42,14 +43,16 @@ void Benchmark::transform_3(radiance::Frame* frame) {
 void Benchmark::run() {
   WindowTimer fps(60);
   uint64_t frame = 0;
-  uint32_t max_iterations = 3;
+  uint32_t max_iterations = 500;
+  omp_set_num_threads(8);
+  std::cout << "Max parallelization: " << omp_get_max_threads() << std::endl;
+  std::cout << "Number of threads: " << omp_get_num_threads() << std::endl;
   std::cout << "Number of iterations: " << max_iterations << std::endl;
   std::cout << "Entity count: " << entity_count_ << std::endl;
   std::cout << "Positions size: " << positions_.components.size() << std::endl;
 
-  for (auto& c : positions_.components) {
-    std::cout << "(" << c.x << ", " << c.y << ")\n";
-  }
+  Timer t;
+  t.start();
   while (frame < max_iterations) {
     fps.start();
     runner_();
@@ -57,11 +60,13 @@ void Benchmark::run() {
     fps.step();
     ++frame;
   }
-  for (auto& c : positions_.components) {
-    std::cout << "(" << c.x << ", " << c.y << ")\n";
-  }
-  std::cout << "Frame time: " << fps.get_avg_elapsed_ns()/1e6 << "[ms]\n";
+  t.stop();
+  float throughput = ((1000 * entity_count_) / (fps.get_avg_elapsed_ns()/1e6));
+  std::cout << "Total time = " << t.get_elapsed_ns() / 1e6 << "[ms]\n";
+  std::cout << "Frame time = " << fps.get_avg_elapsed_ns()/1e6 << "[ms]\n";
   std::cout << "Throughput = "
-    << (int)((1000 * entity_count_) / (fps.get_avg_elapsed_ns()/1e6))
+    << (int)throughput
     << "[entity/s]\n";
+  std::cout << "Per entity = " << fps.get_avg_elapsed_ns() / entity_count_
+            << "[ns/entity]\n";
 }

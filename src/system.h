@@ -142,7 +142,7 @@ class SystemExecutor {
   SystemExecutor() {}
   SystemExecutor(System back): back_(back) {}
 
-  void operator()(Frame* frame) {
+  void operator()(Frame* frame) const {
     for(auto& el : systems_) {
       el.system(frame);
     }

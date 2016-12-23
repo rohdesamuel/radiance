@@ -8,6 +8,7 @@
 #ifndef PIPELINE__H
 #define PIPELINE__H
 
+#include "component.h"
 #include "system.h"
 #include <vector>
 #include <iostream>
@@ -20,7 +21,6 @@ class BasePipeline {
   BasePipeline() {}
 
   std::vector<Id> add(std::vector<System> systems) {
-    std::cout << "add &&\n";
     return systems_.push(systems);
   }
 
@@ -45,14 +45,22 @@ public:
 
   Pipeline() {};
 
+  Pipeline(DataType source, DataType sink,
+           Reader reader, Writer writer) :
+           reader_(reader), writer_(writer) {
+    source_ = (Source*)(source.ptr);
+    sink_ = (Sink*)(sink.ptr);
+    systems_ = SystemExecutor([this](Frame* frame) {
+      writer_(sink_, frame);
+    });
+  }
+
   Pipeline(Source* source, Sink* sink,
            Reader reader, Writer writer) :
            reader_(reader), writer_(writer), source_(source), sink_(sink) {
-    std::cout << "Sink address: " << sink << std::endl;
     sink_ = sink;
     // Why do we need to directly capture "sink" instead of "sink_"?
     systems_ = SystemExecutor([writer, sink](Frame* frame) {
-    //std::cout << "Sink address: " << sink << std::endl;
       writer(sink, frame);
     });
   }

@@ -15,4 +15,18 @@
 #include "system.h"
 #include "table.h"
 
+namespace radiance {
+
+struct Universe {
+  DataManager data_manager;
+  ComponentManager component_manager;
+  SystemManager system_manager;
+};
+
+extern Universe* universe;
+
+Status start(Universe* u);
+
+}
+
 #endif

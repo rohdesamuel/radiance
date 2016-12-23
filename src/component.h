@@ -1,135 +1,122 @@
 #ifndef COMPONENT__H
 #define COMPONENT__H
-#if 0
+
 #include <iostream>
-#include <set>
+#include <unordered_map>
+#include <string>
+#include <vector>
 
 #include "common.h"
-#include "radiance.h"
-#include "table.h"
-#include "vector_math.h"
+#include "system.h"
+
+/*
+Invariants: 
+ * Component data dependencies
+ * System data dependencies
+
+Variances:
+ * If and when a system is run
+ * What components attach to which entity
+ * # of entities
+ * pipeline systems
+*/
 
 namespace radiance
 {
-
-struct Instance {
-  Family family;
-  Handle entity;
+struct CounterBase {
+ protected:
+  static Id counter_;
 };
 
-template<class C>
-using Instances = Table<Id, C>;
-
-typedef Table<Family, void*> Entities;
-typedef Table<Family, class Component*> Components;
-
-// Give me all the children components of component C.
-// Give me all the entities of component C.
-// Give me all the children entities of component C.
-// Give me all the attributes of component C.
-// Give me the system for attribute A of component C.
-//
-// Create component C and all its children.
-// Destroy component C and all its children.
-//
-// Run all systems on all components of type C.
-//
-// Components are only composable.
-// Components cannot form a hierarchy.
-class Component {
- public:
-  typedef std::set<Family> Is;
-  typedef std::set<Family> Has;
-
-
-  /*
-  template <class Type_>
-  static Component create(const Is& is) {
-    Component ret(is);
-    Family family = ret.family();
-    ret.alloc_ = [family](Component* component, Components* components,
-                          Entities* entities, uint64_t count) {
-      components->find(family);
-      Instances<Type_>* instances = (*entities)[entities->find(family)];
-      for (uint64_t i = 0; i < count; ++i) {
-        instances->insert(instances->size(), Type_());
-      }
-    };
-    return ret;
-  }
-
-  static Component create(const Is& is, const Has& has) {
-    Component ret(is, has);
-    ret.alloc_ = [=](Component* component, Components* components,
-                     Entities* entities, uint64_t count) {
-      for(auto family : has) {
-        Component* c = (*components)[components->find(family)];
-        c->alloc(c, components, entities, count);
-      }
-    };
-    return ret;
-  }
-  */
-
-  // Composition operations.
-  void operator+(const Component& c);
-  void operator-(const Component& c);
-
-  static Family family() {
-    static Family id = family_counter_++;
+template<class Type_>
+struct Counter : CounterBase {
+  static Id id() {
+    static Id id = counter_++;
     return id;
   }
+};
 
-  const Is& is() {
-    return is_;
+template<class... Data_>
+struct Component {
+};
+
+template<class Type_>
+struct Data {
+  static Id id() {
+    return Counter<Component<Type_>>::id();
   }
+};
 
-  const Has& has() {
-    return has_;
-  }
+struct ComponentMetadata {
+  Id id;
+  std::vector<Id> dependencies;
+};
 
-  static void alloc(Component* component, Components* components,
-                    Entities* entities, uint64_t count) {
-    component->alloc_(component, components, entities, count);
-  }
+struct SystemMetadata {
+  Id id;
+  std::vector<Id> families;
+  System system;
+};
 
+struct DataType {
+  Id id;
+  void* ptr;
+};
+
+class EntityManager {};
+
+class SystemManager {
  private:
-  static Family family_counter_;
+  std::vector<SystemMetadata> system_metadata_;
 
-  Component(const Is& is): is_(is) {}
-
-  Component(const Is& is, const Has& has): is_(is), has_(has) {}
-
-  Is is_;
-  Has has_;
-
-  std::function<void(Component*, Components*, Entities*, uint64_t)> alloc_;
-};
-
-class ComponentLibrary {
  public:
-  Component create();
+  template<typename... Components_>
+  Id add(System system) {
+    Id ret = system_metadata_.size();
+    system_metadata_.push_back(
+        { ret, { Components_::id()... }, std::move(system) });
+    return ret;
+  }
 
+  void remove(Id) {
+  }
 };
 
-//Component& register_component(std::set<const Component&> is, std::set<const Component&> has) {
-//}
+class ComponentManager {
+ private:
+  std::vector<ComponentMetadata> component_metadata_;
 
-/*
-template<class C, class... Args>
-Instance make_instance(Args&&... args) {
-  Component* component = components[components.find(C::family())];
+ public:
+  template<typename... Data_>
+  Id add() {
+    Id ret = component_metadata_.size();
+    component_metadata_.push_back(
+        { ret, { Data_::id()... } });
+    return ret;
+  }
 
-  Instances<C>* table = entities.find(C::family());
-  Handle handle = table->insert(C(std::forward<Args>(args)...));
-  return {C::family(), handle};
-}*/
+  const std::vector<Id>& dependencies(Id id) const {
+    return component_metadata_[id].dependencies;
+  }
+};
 
-template<class C>
-Instances<C>* get_children() {
-  return entities.find(C::family());
+class DataManager {
+ private:
+  std::vector<DataType> data_types_;
+
+ public:
+  template<typename Collection_>
+  Id add(Collection_* collection) {
+    Id ret = data_types_.size();
+    data_types_.push_back({ ret, (void*)collection });
+    return ret;
+  };
+
+  DataType get(Id id) {
+    return data_types_[id];
+  }
+};
+
 }
 
-}
-#endif
 #endif

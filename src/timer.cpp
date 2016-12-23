@@ -16,7 +16,7 @@ void Timer::start() {
   get_clock_frequency();
   QueryPerformanceCounter(&start_);
 #elif defined (__COMPILE_AS_LINUX__)
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_);
+  clock_gettime(CLOCK_MONOTONIC, &start_);
 #endif
 }
 
@@ -24,7 +24,7 @@ void Timer::stop() {
 #ifdef __COMPILE_AS_WINDOWS__
   QueryPerformanceCounter(&end_);
 #elif defined (__COMPILE_AS_LINUX__)
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_);
+  clock_gettime(CLOCK_MONOTONIC, &end_);
 #endif
 }
 
@@ -41,11 +41,11 @@ double Timer::get_elapsed_ns() {
 timespec Timer::diff(timespec start, timespec end) {
   timespec temp;
   if ((end.tv_nsec-start.tv_nsec)<0) {
-    temp.tv_sec = end.tv_sec-start.tv_sec-1;
-    temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
+    temp.tv_sec = end.tv_sec - start.tv_sec - 1;
+    temp.tv_nsec = NS_TO_SEC + end.tv_nsec - start.tv_nsec;
   } else {
-    temp.tv_sec = end.tv_sec-start.tv_sec;
-    temp.tv_nsec = end.tv_nsec-start.tv_nsec;
+    temp.tv_sec = end.tv_sec - start.tv_sec;
+    temp.tv_nsec = end.tv_nsec - start.tv_nsec;
   }
   return temp;
 }

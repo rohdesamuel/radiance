@@ -50,10 +50,10 @@ namespace radiance
 
 #define CACHE_LINE_SIZE 64
 #ifdef __COMPILE_AS_LINUX__
-#define __CACHE_ALIGNED__ __attribute__((align(64)))
+#define __CACHE_ALIGNED__ __attribute__((aligned(64)))
 
 template<typename T>
-struct  CacheAlligned {
+struct __CACHE_ALIGNED__ CacheAlligned {
   T data;
 };
 #elif defined __COMPILE_AS_WINDOWS__

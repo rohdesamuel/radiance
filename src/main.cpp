@@ -96,10 +96,12 @@ class Program {
   typedef Schema<Handle, Spring> Springs;
   typedef Schema<Entity, Transformation> Transformations;
 
-  typedef Pipeline<typename Springs::View, typename Transformations::Table>
+  typedef Pipeline<typename Springs::View,
+                   typename Transformations::Table>
       SpringsPipeline;
 
-  typedef Pipeline<typename Transformations::Table, typename Transformations::Table>
+  typedef Pipeline<typename Transformations::Table,
+                   typename Transformations::Table>
       TransformationsPipeline;
 
   Program():
@@ -113,35 +115,80 @@ class Program {
           &springs_view,
           &transformations,
           {radiance::IndexedBy::KEY},
-          {}, spring);
+          {});
+    springs_pipeline.add({spring});
 
     transformations_pipeline = TransformationsPipeline(
           &transformations,
           &transformations,
           {radiance::IndexedBy::OFFSET},
-          {}, bind_position * move);
+          {});
+    //transformations_pipeline.add({move});
+    transformations_pipeline.add({move, bind_position});
   }
 
+  static void collide(const Transformation& me, const Transformation& other,
+                      Transformation* accum) {
+    glm::vec3 delta = other.p - me.p;
+    float d = glm::length(delta);
+    glm::vec3 mtd = delta * (((radius() * 2) - d) / d);
+
+    float im1 = 1;
+    float im2 = 1;
+    float inv_mass = 1 / (im1 + im2);
+    
+    glm::vec3 v = other.v - me.v;
+    float vn = glm::dot(v, glm::normalize(mtd));
+
+    if (vn > 0.0f) {
+      return;
+    }
+
+    const float restitution = 1.0f;
+    float i = (-(1.0f + restitution) * vn) * inv_mass;
+    glm::vec3 impulse = mtd * i;
+
+    accum->v += impulse * im1;
+  }
+  
   static void spring_system(
       Frame* frame, Transformations::View& transformations_view) {
     auto* el = frame->result<Springs::View::Element>();
 
     Handle handle = el->key;
-    Transformation accum = transformations_view[handle];
+
+    const Transformation& me = transformations_view[handle];
+    Transformation accum = me;
 
     for (const auto& connection : el->component) {
-      const Handle& other = std::get<0>(connection);
-      const float& spring_k = std::get<1>(connection);
-      glm::vec3 r = transformations_view[other].p - accum.p;
+      const Handle& other_handle = std::get<0>(connection);
+      const Transformation& other = transformations_view[other_handle];
+      //const float& spring_k = std::get<1>(connection);
+      glm::vec3 r = other.p - accum.p;
+      float l = glm::length(r);
+      if (l > radius()) {
+        l = l * l;
+        //accum.v += 0.0000000001f * (glm::normalize(r) / l);
+      } else {
+        collide(me, other, &accum);
+        //accum.v -= 0.0000001f * (glm::normalize(r) / l);
+      }
+
+      /*
       if (glm::length(r) < 0.05f) {
         accum.v -= r * spring_k * 1.1f;
       }
       if (glm::length(r) < 0.2f) {
         accum.v += r * spring_k;
         accum.v *= 0.99999f;
-      }
+      }*/
     }
     
+    /*
+    frame->result(Transformations::Mutation{
+        MutateBy::WRITE,
+        Transformations::Element{IndexedBy::HANDLE , handle, accum}
+        });*/
     frame->result(Transformations::Element{IndexedBy::HANDLE , handle, accum});
   }
 
@@ -151,6 +198,7 @@ class Program {
     /*float l = el->component.v.length();
     el->component.v /= el->component.v.length();
     el->component.v *= std::min(l, 0.5f);*/
+    //el->component.v.z -= 0.0001f;
     el->component.p += el->component.v;
   }
 
@@ -158,22 +206,21 @@ class Program {
       Frame* frame, float top, float left, float bottom, float right) {
     auto* el = frame->result<Transformations::Element>();
     if (el->component.p.x <= left || el->component.p.x >= right) {
-      /*el->component.p.x = std::min(
-          std::max(el->component.p.x, left), (float)(right));*/
-      el->component.v.x *= 1.0f;
+      el->component.p.x = std::min(
+          std::max(el->component.p.x, left), (float)(right));
+      el->component.v.x *= -1.0f;
     }
 
     if (el->component.p.y <= bottom || el->component.p.y >= top) {
-      /*el->component.p.y = std::min(
-          std::max(el->component.p.y, bottom), (float)(top));*/
-      el->component.v.y *= 1.0f;
+      el->component.p.y = std::min(
+          std::max(el->component.p.y, bottom), (float)(top));
+      el->component.v.y *= -1.0f;
     }
 
     if (el->component.p.z <= bottom || el->component.p.z >= top) {
-      /*
       el->component.p.z = std::min(
-          std::max(el->component.p.z, bottom), (float)(top));*/
-      el->component.v.z *= 1.0f;
+          std::max(el->component.p.z, bottom), (float)(top));
+      el->component.v.z *= -1.0f;
     }
   }
 
@@ -188,6 +235,12 @@ class Program {
   Springs::View springs_view;
   Transformations::Table transformations;
   Transformations::View transformations_view;
+  Transformations::MutationBuffer transformations_buffer;
+
+  inline static constexpr float radius() {
+    // return 0.1f;  // Makes a very tight galaxy
+    return 0.25f; // Makes a good galaxy
+  }
 };
 }  // namespace program
 
@@ -282,7 +335,7 @@ int main() {
 
   glClearColor(0.0, 0.0, 0.0, 1.0);
 
-  uint64_t count = 2500;
+  uint64_t count = 1000;
 
   program::Program p;
 
@@ -292,9 +345,12 @@ int main() {
     float y = 2 * (((GLfloat)(rand() % 10000) / 10000.0f) - 0.5f);
     float z = 2 * (((GLfloat)(rand() % 10000) / 10000.0f) - 0.5f);
     glm::vec3 pos = {x, y, z};
-    glm::vec3 vel = {0, 0, 0};
+    glm::vec3 vel = {x, y, z};
+    vel *= 0.01f;
     p.transformations.insert(i, program::Program::Transformation{pos, vel});
   }
+  
+#if 1
   for (uint64_t i = 0; i < count; ++i) {
     program::Program::Springs::Component springs_list;
     for (uint64_t j = 0; j < count; ++j) {
@@ -304,6 +360,7 @@ int main() {
     }
     p.springs.insert(i, std::move(springs_list));
   }
+#endif
 
   GLuint points_buffer;
   glGenBuffers(1, &points_buffer);
@@ -322,14 +379,14 @@ int main() {
   WindowTimer fps(60);
   while(running) {
     fps.start();
-    p.transformations_pipeline();
     p.springs_pipeline();
+    p.transformations_buffer.flush(&p.transformations);
+    p.transformations_pipeline();
+    fps.stop();
+    fps.step();
 
     static glm::vec2 mouse_pos;
     static glm::vec2 mouse_delta;
-
-    fps.stop();
-    fps.step();
 
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(shader_program);
@@ -381,7 +438,8 @@ int main() {
           mouse_delta = pos - mouse_pos;
           mouse_pos = pos;
           camera_dir += mouse_delta.x;
-          camera_zdir += mouse_delta.y;
+          camera_zdir = 180.0f * (pos.y / 480.0f);
+          camera_zdir = std::max(std::min(camera_zdir, 179.9f), 0.1f);
           break;
       }
 
@@ -393,6 +451,7 @@ int main() {
     }
     SDL_GL_SwapWindow(window);
     ++frame;
+    //printf("%.2fms           \r", fps.get_avg_elapsed_ns() / 1e6);
     printf("%.2ffps           \r", 1e9 / fps.get_avg_elapsed_ns());
   }
 
@@ -561,9 +620,65 @@ int main() {
   while (1);
 }
 #endif
-#if 1
-int main() {
-  Benchmark benchmark(10);
+#if 0
+#include <getopt.h>
+
+int main(int, char**) {
+  Benchmark benchmark(1000000);
   benchmark.run();
+  return 0;
 }
+#endif
+#if 1
+#include "radiance.h"
+using radiance::Data;
+using radiance::Component;
+
+struct Position : Data<Position> {};
+struct Velocity : Data<Velocity> {};
+struct Mesh : Data<Mesh> {
+  float** vertices;
+};
+
+struct Transformation : Data<Transformation> {
+  glm::vec3 v;
+  glm::vec3 p;
+};
+
+typedef radiance::Schema<int32_t, Transformation> Transformations;
+
+struct Moveable : Component<Transformation> {
+  static void move(radiance::Frame*) {}
+};
+
+struct Collidable : Component<Transformation, Mesh> {
+};
+
+
+int main() {
+  using namespace radiance;
+  Universe u;
+  radiance::start(&u);
+
+  Transformations::Table transformations;
+  Transformations::View transformations_view(&transformations);
+
+  SystemManager& system_manager = universe->system_manager;
+  std::cout << system_manager.add<Moveable>(Moveable::move) << std::endl;
+
+  ComponentManager& component_manager = universe->component_manager;
+  std::cout <<  component_manager.add<Transformation, Mesh>() << std::endl;
+
+  DataManager& data_manager = universe->data_manager;
+  Id table = data_manager.add(&transformations);
+  Id view = data_manager.add(&transformations_view);
+
+  Pipeline<Transformations::Table, Transformations::View> program(
+      data_manager.get(table), data_manager.get(view),
+      {radiance::IndexedBy::KEY}, {});
+  program.add({ Moveable::move });
+
+  return 0;
+}
+
 #endif
