@@ -10,98 +10,12 @@
 
 #include <functional>
 #include <vector>
-#include <iostream>
 
 #include "common.h"
-#include "stack_memory.h"
+#include "frame.h"
 
 namespace radiance
 {
-
-class Frame {
-private:
-  StackMemory<128> stack;
-  void* ret_ = nullptr;
-
-  template<class T>
-  T* push(const T& t) {
-    T* new_t = (T*)stack.alloc(sizeof(T));
-    new (new_t) T(t);
-    return new_t;
-  }
-
-  template<class T>
-  T* push(T&& t) {
-    T* new_t = (T*)stack.alloc(sizeof(T));
-    new (new_t) T(std::move(t));
-    return new_t;
-  }
-
-public:
-  template<class T>
-  T* alloc() {
-    return (T*)stack.alloc(sizeof(T));
-  }
-
-  template<class T>
-  T* result(const T& t) {
-    return (T*)(ret_ = (T*)push(t));
-  }
-
-  template<class T>
-  T* result(T&& t) {
-    return (T*)(ret_ = (T*)push(std::move(t)));
-  }
-
-  template<class T>
-  inline T* result() const {
-    DEBUG_ASSERT(ret_, Status::Code::NULL_POINTER);
-    return (T*)ret_;
-  }
-
-  template<class T>
-  void clear_result_as() {
-    DEBUG_ASSERT(ret_, Status::Code::NULL_POINTER);
-    ((T*)ret_)->~T();
-    stack.free<T>((T*)ret_);
-    ret_ = nullptr;
-  }
-
-  void clear() {
-    stack.clear();
-  }
-};
-#if 0
-class System {
-private:
-  std::function<void(Frame*)> f_;
-
-public:
-  System() {}
-
-  template<class F>
-  System(F f) : f_(f) {}
-
-  template<class F, class... State>
-  System(F f, State... state) {
-    f_ = [=](Frame* frame) {
-      return f(frame, state...);
-    };
-  }
-
-  inline void operator()(Frame* f) const {
-    f_(f);
-  }
-
-  System operator*(System system) {
-    std::function<void(Frame*)>& my_system = f_;
-    return System([my_system, system](Frame* frame) {
-      system(frame);
-      my_system(frame);
-    });
-  }
-};
-#endif
 
 class System {
 private:
@@ -111,11 +25,11 @@ private:
 public:
   System() {}
 
-  template<class F>
-  System(F f) : f_(f) {}
+  template<typename Function_>
+  System(Function_ f) : f_(f) {}
 
-  template<class F, class... State>
-  System(F f, State... state) {
+  template<typename Function_, typename... State_>
+  System(Function_ f, State_... state) {
     f_ = [=](Frame* frame) {
       return f(frame, state...);
     };

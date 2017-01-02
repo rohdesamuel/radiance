@@ -37,23 +37,15 @@ protected:
 
 };
 
-template<class Source, class Sink>
+template<typename Source_, typename Sink_>
 class Pipeline: public BasePipeline {
 public:
+  typedef Source_ Source;
+  typedef Sink_ Sink;
   typedef typename Source::Reader Reader;
   typedef typename Sink::Writer Writer;
 
   Pipeline() {};
-
-  Pipeline(DataType source, DataType sink,
-           Reader reader, Writer writer) :
-           reader_(reader), writer_(writer) {
-    source_ = (Source*)(source.ptr);
-    sink_ = (Sink*)(sink.ptr);
-    systems_ = SystemExecutor([this](Frame* frame) {
-      writer_(sink_, frame);
-    });
-  }
 
   Pipeline(Source* source, Sink* sink,
            Reader reader, Writer writer) :
@@ -76,9 +68,11 @@ private:
   Sink* sink_;
 };
 
-template<class Source>
-class Pipeline<Source, void>: public BasePipeline {
+template<typename Source_>
+class Pipeline<Source_, void>: public BasePipeline {
 public:
+  typedef Source_ Source;
+  typedef void Sink;
   typedef typename Source::Reader Reader;
   typedef void Writer;
 
@@ -97,9 +91,11 @@ private:
   Source* source_;
 };
 
-template<class Sink>
-class Pipeline<void, Sink>: public BasePipeline {
+template<typename Sink_>
+class Pipeline<void, Sink_>: public BasePipeline {
 public:
+  typedef void Source;
+  typedef Sink_ Sink;
   typedef void Reader;
   typedef typename Sink::Writer Writer;
 

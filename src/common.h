@@ -10,13 +10,13 @@
 
 #ifndef __LP64__
 #define __LP32__
-#endif
+#endif  // __LP_64__
 
 #if ((defined _WIN32 || defined __LP32__) && !defined _WIN64) 
 #define __COMPILE_AS_32__
 #elif (defined _WIN64 || defined __LP64__)
 #define __COMPILE_AS_64__
-#endif
+#endif  // defined _WIN64 || defined __LP64__
 
 #ifdef __ENGINE_DEBUG__
 #define _CRTDBG_MAP_ALLOC
@@ -24,7 +24,7 @@
 
 #ifdef __COMPILE_AS_WINDOWS__
 #include <crtdbg.h>
-#endif
+#endif  // COMPILE_AS_WINDOWS__
 
 #define DEBUG_ASSERT(expr, exit_code) \
 do{ if (!(expr)) exit(exit_code); } while (0)
@@ -32,10 +32,10 @@ do{ if (!(expr)) exit(exit_code); } while (0)
 #define DEBUG_OP(expr) do{ expr; } while(0)
 
 #else
-#define DEBUG_ASSERT(expr, exit_code) do{}while(0)
-#define DEBUG_OP(expr) do{ expr } while(0)
+#define DEBUG_ASSERT(expr, exit_code) do{} while(0)
+#define DEBUG_OP(expr) do{} while(0)
 
-#endif
+#endif  // __ENGINE_DEBUG__
 
 #include <cstdint>
 
@@ -67,7 +67,6 @@ struct __CACHE_ALIGNED__ CacheAlligned {
 typedef int64_t Handle;
 typedef int64_t Offset;
 typedef int64_t Entity;
-typedef int32_t Family;
 typedef int64_t Id;
 
 struct Status {
@@ -77,6 +76,7 @@ struct Status {
     MEMORY_OUT_OF_BOUNDS,
     NULL_POINTER,
     UNKNOWN_INDEXED_BY_VALUE,
+    INCOMPATIBLE_DATA_TYPES,
     FAILED_INITIALIZATION
   };
 

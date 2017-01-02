@@ -630,54 +630,76 @@ int main(int, char**) {
 }
 #endif
 #if 1
+
+#define __ENGINE_DEBUG__
 #include "radiance.h"
 using radiance::Data;
-using radiance::Component;
 
-struct Position : Data<Position> {};
-struct Velocity : Data<Velocity> {};
-struct Mesh : Data<Mesh> {
+struct Position {};
+struct Velocity {};
+struct Mesh {
   float** vertices;
 };
 
-struct Transformation : Data<Transformation> {
+struct Transformation {
   glm::vec3 v;
   glm::vec3 p;
 };
 
 typedef radiance::Schema<int32_t, Transformation> Transformations;
 
-struct Moveable : Component<Transformation> {
+struct Moveable {
   static void move(radiance::Frame*) {}
 };
 
-struct Collidable : Component<Transformation, Mesh> {
+struct Collidable {
 };
 
+template<class Source_, class Sink_>
+radiance::Pipeline<Source_, Sink_> make_pipeline(
+    radiance::Id source, radiance::Id sink, typename Source_::Reader reader,
+    typename Sink_::Writer writer) {
+  const Data& source_data = radiance::universe->data_manager.get(source);
+  const Data& sink_data = radiance::universe->data_manager.get(sink);
+  return radiance::Pipeline<Source_, Sink_>(
+      (Source_*)source_data,
+      (Sink_*)sink_data, reader, writer);
+}
+
+template<class Source_, class Sink_>
+radiance::Pipeline<Source_, Sink_> make_pipeline(
+    radiance::Data source, radiance::Data sink, typename Source_::Reader reader,
+    typename Sink_::Writer writer) {
+  return radiance::Pipeline<Source_, Sink_>(
+      (Source_*)source.ptr,
+      (Sink_*)sink.ptr, reader, writer);
+}
 
 int main() {
   using namespace radiance;
   Universe u;
   radiance::start(&u);
 
-  Transformations::Table transformations;
-  Transformations::View transformations_view(&transformations);
+  DataManager& data_manager = universe->data_manager;
+  Data table = data_manager.emplace<Transformations::Table>();
+  Data view = data_manager.emplace<Transformations::View>(table);
 
   SystemManager& system_manager = universe->system_manager;
   std::cout << system_manager.add<Moveable>(Moveable::move) << std::endl;
 
   ComponentManager& component_manager = universe->component_manager;
-  std::cout <<  component_manager.add<Transformation, Mesh>() << std::endl;
+  Id movable = component_manager.add<Transformations::Table>({table});
+  Id collidable =  component_manager.add<Transformations::Table, Mesh>({});
 
-  DataManager& data_manager = universe->data_manager;
-  Id table = data_manager.add(&transformations);
-  Id view = data_manager.add(&transformations_view);
+  EntityManager entity_manager;
+  Id ball = entity_manager.add({movable, collidable});
 
-  Pipeline<Transformations::Table, Transformations::View> program(
-      data_manager.get(table), data_manager.get(view),
+  auto program = make_pipeline<Transformations::View, Transformations::Table>(
+      view, table,
       {radiance::IndexedBy::KEY}, {});
   program.add({ Moveable::move });
 
+  radiance::stop(&u);
   return 0;
 }
 

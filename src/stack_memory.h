@@ -38,10 +38,10 @@ public:
     return ret;
   }
 
-  template<class T>
-  void free(T* t) {
+  template<typename Type_>
+  void free(Type_* t) {
     DEBUG_OP(
-      memset((void*)t, 0, sizeof(T));
+      memset((void*)t, 0, sizeof(Type_));
     );
   }
 

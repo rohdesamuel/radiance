@@ -20,7 +20,6 @@
 #include "common.h"
 #include "component.h"
 #include "system.h"
-#include "operators.h"
 
 namespace radiance
 {
@@ -39,27 +38,27 @@ enum class MutateBy {
   WRITE
 };
 
-template<class Key, class Component>
+template<typename Key_, typename Value_>
 struct BaseElement {
   IndexedBy indexed_by;
   union {
     Offset offset;
     Handle handle;
-    Key key;
+    Key_ key;
   };
-  Component component;
+  Value_ value;
 };
 
-template <class K, class C, class Allocator = std::allocator<C>>
+template <typename Key_, typename Value_, typename Allocator_ = std::allocator<Value_>>
 class Table {
 public:
-  typedef K Key;
-  typedef C Component;
+  typedef Key_ Key;
+  typedef Value_ Value;
 
-  typedef BaseElement<Key, Component> Element;
+  typedef BaseElement<Key, Value> Element;
 
   typedef ::boost::container::vector<Key> Keys;
-  typedef ::boost::container::vector<Component> Components;
+  typedef ::boost::container::vector<Value> Values;
 
   // For fast lookup if you have the handle to an entity.
   typedef ::boost::container::vector<uint64_t> Handles;
@@ -70,7 +69,7 @@ public:
 
   Table() {}
 
-  Table(boost::container::vector<std::tuple<Key, Component>>&& init_data) {
+  Table(boost::container::vector<std::tuple<Key, Value>>&& init_data) {
     for (auto& t : init_data) {
       insert(std::move(std::get<0>(t)), std::move(std::get<1>(t)));
     }
@@ -78,7 +77,7 @@ public:
 
   struct Mutation {
     MutateBy mutate_by;
-    BaseElement<Key, Component> el;
+    BaseElement<Key, Value> el;
   };
 
   class Reader {
@@ -132,7 +131,7 @@ public:
       return {
         IndexedBy::OFFSET,
         (Offset)index,
-        table->component(index)
+        table->value(index)
       };
     }
 
@@ -140,7 +139,7 @@ public:
       return {
         IndexedBy::HANDLE,
         (Handle)table->find(table->key(index)),
-        table->component(index)
+        table->value(index)
       };
     }
 
@@ -148,7 +147,7 @@ public:
       return {
         IndexedBy::KEY,
         (Key)table->key(index),
-        table->component(index)
+        table->value(index)
       };
     }
 
@@ -194,13 +193,13 @@ public:
       Element* el = frame->result<Element>();
       switch (el->indexed_by) {
         case IndexedBy::OFFSET:
-          table->components[el->offset] = std::move(el->component);
+          table->values[el->offset] = std::move(el->value);
           break;
         case IndexedBy::HANDLE:
-          (*table)[el->handle] = std::move(el->component);
+          (*table)[el->handle] = std::move(el->value);
           break;
         case IndexedBy::KEY:
-          table->components[table->find(el->key)] = std::move(el->component);
+          table->values[table->find(el->key)] = std::move(el->value);
           break;
         case IndexedBy::UNKNOWN:
           break;
@@ -212,32 +211,32 @@ public:
     }
   };
 
-  Handle insert(Key&& key, Component&& component) {
+  Handle insert(Key&& key, Value&& value) {
     Handle handle = make_handle();
 
     index_[key] = handle;
 
-    components.push_back(std::move(component));
+    values.push_back(std::move(value));
     keys.push_back(key);
     return handle;
   }
 
-  Handle insert(const Key& key, Component&& component) {
+  Handle insert(const Key& key, Value&& value) {
     Handle handle = make_handle();
 
     index_[key] = handle;
 
-    components.push_back(std::move(component));
+    values.push_back(std::move(value));
     keys.push_back(key);
     return handle;
   }
 
-  Component& operator[](Handle handle) {
-    return components[handles_[handle]];
+  Value& operator[](Handle handle) {
+    return values[handles_[handle]];
   }
 
-  const Component& operator[](Handle handle) const {
-    return components[handles_[handle]];
+  const Value& operator[](Handle handle) const {
+    return values[handles_[handle]];
   }
 
   Handle find(Key&& key) const {
@@ -264,16 +263,16 @@ public:
     return keys[index];
   }
 
-  inline Component& component(uint64_t index) {
-    return components[index];
+  inline Value& value(uint64_t index) {
+    return values[index];
   }
 
-  inline const Component& component(uint64_t index) const {
-    return components[index];
+  inline const Value& value(uint64_t index) const {
+    return values[index];
   }
 
   uint64_t size() const {
-    return components.size();
+    return values.size();
   }
 
   int64_t remove(Handle handle) {
@@ -285,21 +284,21 @@ public:
     Handle h_to = index_[k_to];
     uint64_t& i_to = handles_[h_to];
 
-    Component& c_from = components[i_from];
-    Component& c_to = components[i_to];
+    Value& c_from = values[i_from];
+    Value& c_to = values[i_to];
 
     release_handle(h_from);
 
     index_.erase(k_from);
     std::swap(i_from, i_to);
     std::swap(k_from, k_to); keys.pop_back();
-    std::swap(c_from, c_to); components.pop_back();
+    std::swap(c_from, c_to); values.pop_back();
 
     return 0;
   }
 
   Keys keys;
-  Components components;
+  Values values;
 
 private:
   Handle make_handle() {
@@ -321,11 +320,11 @@ private:
   Index index_;
 };
 
-template <class T>
+template <typename Table_>
 class View {
 public:
-  typedef T Table;
-  typedef BaseElement<typename Table::Key, const typename Table::Component&> Element;
+  typedef Table_ Table;
+  typedef BaseElement<typename Table::Key, const typename Table::Value&> Element;
 
   View(Table* table) : table_(table) {}
 
@@ -335,7 +334,6 @@ public:
 
     static void iterate_view(View* view, SystemExecutor& system,
                              std::function<Element(View*, int64_t)> reader) {
-#if 0
 #pragma omp parallel for
       for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
         thread_local static Frame frame;
@@ -343,61 +341,13 @@ public:
         frame.result(reader(view, i));
         system(&frame);
       }
-#else
-      {
-        auto it = system.begin();
-        auto end = system.end();
-        static std::vector<Frame> frames;
-        if (view->size() > frames.size()) {
-          frames.resize(view->size());
-        }
-
-        do {
-          System& sys = it->system;
-#pragma omp parallel for
-          for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
-            Frame& frame = frames[i];
-            if (it == system.begin()) {
-              frame.clear();
-              frame.result(reader(view, i));
-            }
-            sys(&frame);
-          }
-          ++it;
-        } while(it != end);
-
-        for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
-          Frame& frame = frames[i];
-          (system.back())(&frame);
-        }
-      }
-#endif
-/*      auto it = system.begin();
-      do {
-//#pragma omp parallel for
-        for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
-          thread_local static std::vector<Frame> frames;
-          if (view->size() > frames.size()) {
-            frames.resize(view->size());
-          }
-          Frame& frame = frames[i];
-          if (i == 0) {
-            frame.clear();
-          }
-
-          frame.result(reader(view, i));
-          (it->system)(&frame);
-        }
-        ++it;
-      }
-      while (it != system.end());*/
     }
 
     inline static Element get_by_offset(View* view, int64_t index) {
       return {
         IndexedBy::OFFSET,
         (Offset)index,
-        view->component(index)
+        view->value(index)
       };
     }
 
@@ -405,7 +355,7 @@ public:
       return {
         IndexedBy::HANDLE,
         (Handle)view->find(view->key(index)),
-        view->component(index)
+        view->value(index)
       };
     }
 
@@ -413,7 +363,7 @@ public:
       return {
         IndexedBy::KEY,
         (typename Table::Key)view->key(index),
-        view->component(index)
+        view->value(index)
       };
     }
 
@@ -446,7 +396,7 @@ public:
     }
   };
 
-  inline const typename Table::Component& operator[](Handle handle) const {
+  inline const typename Table::Value& operator[](Handle handle) const {
     return table_->operator[](handle);
   }
 
@@ -462,20 +412,21 @@ public:
     return table_->keys[index];
   }
 
-  inline const typename Table::Component& component(uint64_t index) const {
-    return table_->components[index];
+  inline const typename Table::Value& value(uint64_t index) const {
+    return table_->values[index];
   }
 
   inline uint64_t size() const {
-    return table_->components.size();
+    return table_->values.size();
   }
 private:
   Table* table_;
 };
 
-template<class Table>
+template<typename Table_>
 class MutationBuffer {
 public:
+  typedef Table_ Table;
   typedef typename Table::Mutation Mutation;
   typedef Mutation Element;
 
@@ -487,7 +438,7 @@ public:
     [=](Table* table, Mutation&& m) {
         switch (m.mutate_by) {
           case MutateBy::INSERT:
-            table->insert(std::move(m.el.key), std::move(m.el.component));
+            table->insert(std::move(m.el.key), std::move(m.el.value));
             break;
           case MutateBy::REMOVE:
             table->remove(table->find(m.el.key));
@@ -495,13 +446,13 @@ public:
           case MutateBy::WRITE:
             switch (m.el.indexed_by) {
               case IndexedBy::HANDLE:
-                (*table)[m.el.handle] = std::move(m.el.component);
+                (*table)[m.el.handle] = std::move(m.el.value);
                 break;
               case IndexedBy::KEY:
-                table->components[table->find(m.el.key)] = std::move(m.el.component);
+                table->values[table->find(m.el.key)] = std::move(m.el.value);
                 break;
               case IndexedBy::OFFSET:
-                table->components[m.el.offset] = std::move(m.el.component);
+                table->values[m.el.offset] = std::move(m.el.value);
                 break;
               default:
                 break;
@@ -516,13 +467,13 @@ public:
     return mutations_.push(m);
   }
 
-  template<MutateBy mutate_by, IndexedBy indexed_by, class IndexType>
-  void emplace(IndexType&& index, typename Table::Component&& component) {
+  template<MutateBy mutate_by, IndexedBy indexed_by, typename IndexType_>
+  void emplace(IndexType_&& index, typename Table::Value&& value) {
     push(Mutation { 
            mutate_by, {
              indexed_by,
              std::move(index),
-             std::move(component) 
+             std::move(value) 
            }
          });
   }
@@ -533,8 +484,8 @@ public:
     });
   }
 
-  template<class Resolver>
-  uint64_t flush(Table* table, Resolver r) {
+  template<typename Resolver_>
+  uint64_t flush(Table* table, Resolver_ r) {
     return mutations_.consume_all([=](Mutation m) {
       r(table, std::move(m));
     });

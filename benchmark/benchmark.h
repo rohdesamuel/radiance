@@ -1,7 +1,7 @@
 #ifndef BENCHMARK__H
 #define BENCHMARK__H
 
-#include "radiance.h"
+#include "src/radiance.h"
 
 class Benchmark {
 public:
@@ -11,8 +11,7 @@ public:
 
   Benchmark(uint32_t entity_count);
 
-  typedef radiance::Schema<uint32_t, Position> PositionSchema;
-  typedef PositionSchema::Table Positions;
+  typedef radiance::Table<uint32_t, Position> Positions;
 
   void run();
 
@@ -23,7 +22,6 @@ public:
 private:
   radiance::Pipeline<Positions, Positions> runner_;
   Positions positions_;
-  radiance::SystemList benchmark_system_;
   uint32_t entity_count_ = 0;
 };
 

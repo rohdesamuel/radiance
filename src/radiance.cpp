@@ -2,10 +2,13 @@
 
 namespace radiance {
 
-Universe* universe = nullptr; 
-
 Status start(Universe* u) {
   universe = u;
+  return Status::OK;
+}
+
+Status stop(Universe*) {
+  universe = nullptr;
   return Status::OK;
 }
 
