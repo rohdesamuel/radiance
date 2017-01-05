@@ -50,5 +50,5 @@ public:
   }
 };
 
-}
+}  // namespace radiance
 #endif

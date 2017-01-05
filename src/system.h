@@ -117,6 +117,6 @@ class SystemExecutor {
   Id id_;
 };
 
-}
+}  // namespace radiance
 
 #endif

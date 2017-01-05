@@ -28,6 +28,6 @@ struct Schema {
   typedef Value_ Value;
 };
 
-}
+}  // namespace radiance
 
 #endif

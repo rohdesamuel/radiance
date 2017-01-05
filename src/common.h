@@ -95,6 +95,6 @@ struct Status {
 
 using std::size_t;
 
-}
+}  // namespace radiance
 
 #endif

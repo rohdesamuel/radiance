@@ -8,21 +8,24 @@
 #ifndef RADIANCE__H
 #define RADIANCE__H
 
-#include "component.h"
-#include "memory.h"
-#include "pipeline.h"
-#include "schema.h"
-#include "system.h"
-#include "table.h"
 #include "universe.h"
 
 namespace radiance {
 
-extern Universe* universe;
-
 Status start(Universe* u);
 Status stop(Universe* u);
 
-}
+namespace program {
 
-#endif
+struct Options {
+  uint8_t cores = 1;
+};
+
+Status create_program(Options opts, Program** program);
+Status attach_process(Program* program, Process* process);
+
+}  // namespace program
+
+}  // namespace radiance
+
+#endif  // #ifndef RADIANCE__H

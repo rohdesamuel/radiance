@@ -195,6 +195,6 @@ class DataManager {
   }
 };
 
-}
+}  // namespace radiance
 
 #endif

@@ -34,7 +34,6 @@ class BasePipeline {
 
 protected:
   SystemExecutor systems_;
-
 };
 
 template<typename Source_, typename Sink_>
@@ -119,5 +118,6 @@ private:
   Sink* sink_;
 };
 
-}
+}  // namespace radiance
+
 #endif

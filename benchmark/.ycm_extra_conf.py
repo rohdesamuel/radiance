@@ -76,7 +76,7 @@ flags = [
 # Custom flags...
 '-I',
 '..',
-'fopenmp'
+'-fopenmp'
 ]
 
 
