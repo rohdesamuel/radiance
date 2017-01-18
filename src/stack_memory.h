@@ -26,6 +26,25 @@ public:
     clear();
   }
 
+  void* push(size_t type_size) {
+    return alloc(type_size);
+  }
+
+  void* pop(size_t type_size) {
+    void* ret = nullptr;
+
+    if (top_ - type_size >= stack_) {
+      std::cout << (int*)top_ << std::endl;
+      top_ -= type_size;
+      std::cout << (int*)top_ << std::endl;
+      ret = top_;
+      std::cout << "size: " << type_size << std::endl;
+    }
+
+    DEBUG_ASSERT(ret, Status::Code::MEMORY_OUT_OF_BOUNDS);
+    return ret;
+  }
+
   void* alloc(size_t type_size) {
     void* ret = nullptr;
 

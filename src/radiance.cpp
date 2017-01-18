@@ -4,12 +4,12 @@ namespace radiance {
 
 static Universe* universe = nullptr;
 
-Status start(Universe* u) {
+int32_t start(Universe* u, Program* p) {
   universe = u;
   return Status::OK;
 }
 
-Status stop(Universe*) {
+int32_t stop(Universe* u) {
   universe = nullptr;
   return Status::OK;
 }

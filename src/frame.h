@@ -14,6 +14,14 @@ private:
   StackMemory<128> stack_;
   void* ret_ = nullptr;
 
+public:
+  template<typename Type_>
+  void pop() {
+    std::cout << "<pop> " << ret_ << std::endl;
+    ret_ = stack_.pop(sizeof(Type_));
+    std::cout << "</pop> " << ret_ << std::endl;
+  }
+
   template<typename Type_>
   Type_* push(const Type_& t) {
     Type_* new_t = (Type_*)stack_.alloc(sizeof(Type_));
@@ -28,7 +36,6 @@ private:
     return new_t;
   }
 
-public:
   template<typename Type_>
   Type_* alloc() {
     return (Type_*)stack_.alloc(sizeof(Type_));

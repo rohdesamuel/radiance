@@ -37,6 +37,11 @@ do{ if (!(expr)) exit(exit_code); } while (0)
 
 #endif  // __ENGINE_DEBUG__
 
+#ifdef __cplusplus
+#define BEGIN_EXTERN_C extern "C" {
+#define END_EXTERN_C }
+#endif  // ifdef __cplusplus
+
 #include <cstdint>
 
 namespace radiance

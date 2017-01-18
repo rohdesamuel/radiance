@@ -73,6 +73,10 @@ flags = [
 './tests/gmock',
 '-isystem',
 './tests/gmock/include',
+# Custom flags...
+'-I',
+'..',
+'-fopenmp'
 ]
 
 

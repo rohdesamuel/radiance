@@ -8,10 +8,8 @@
 #ifndef PIPELINE__H
 #define PIPELINE__H
 
-#include "component.h"
 #include "system.h"
 #include <vector>
-#include <iostream>
 
 namespace radiance
 {

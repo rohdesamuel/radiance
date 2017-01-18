@@ -12,13 +12,13 @@
 #define _ENABLE_ATOMIC_ALIGNMENT_FIX
 #endif
 
+#include <iostream>
+
 #include <boost/container/map.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/container/vector.hpp>
-#include <iostream>
 
 #include "common.h"
-#include "component.h"
 #include "system.h"
 
 namespace radiance
@@ -191,6 +191,8 @@ public:
 
     static void write(Table* table, Frame* frame) {
       Element* el = frame->result<Element>();
+      std::cout << table << std::endl;
+      std::cout << el->value << std::endl;
       switch (el->indexed_by) {
         case IndexedBy::OFFSET:
           table->values[el->offset] = std::move(el->value);
@@ -217,6 +219,26 @@ public:
     index_[key] = handle;
 
     values.push_back(std::move(value));
+    keys.push_back(key);
+    return handle;
+  }
+
+  Handle insert(Key&& key, const Value& value) {
+    Handle handle = make_handle();
+
+    index_[key] = handle;
+
+    values.push_back(value);
+    keys.push_back(key);
+    return handle;
+  }
+
+  Handle insert(const Key& key, const Value& value) {
+    Handle handle = make_handle();
+
+    index_[key] = handle;
+
+    values.push_back(value);
     keys.push_back(key);
     return handle;
   }
@@ -509,6 +531,81 @@ public:
 
 private:
   ::boost::lockfree::queue<Mutation> mutations_;
+};
+
+/*
+template<class... Sinks_>
+class Multiplexer {
+ public:
+  Multiplexer(Sinks_*... sinks) {
+    sinks_ = { sinks... };
+  }
+
+  constexpr bool is_thread_safe() {
+    return false;
+  }
+
+  static void write(Multiplexer* sink, Frame* frame) {
+    std::vector<void*> tables = sink->sinks_;
+    sink->write<Sinks_...>(frame, &tables);
+  }
+
+  void operator()(Multiplexer* sink, Frame* frame) {
+    write(sink, frame);
+  }
+
+ private:
+  template<class Table_>
+  void write(Frame* frame, void* table) {
+    Table_::Writer::write((Table_*)table, frame);
+    frame->pop<typename Table_::Element>();
+  }
+
+  template<class Table_, class... Args_>
+  void write(Frame* frame, std::vector<void*>* tables) {
+    write<Table_>(frame, tables->back());
+    tables->pop_back();
+    write<Args_...>(frame, tables);
+  }
+
+  std::vector<void*> sinks_;
+};*/
+template<class... Sinks_>
+class Multiplexer {
+ public:
+  Multiplexer(Sinks_*... sinks) {
+    sinks_ = std::tuple<Sinks_*...>(sinks...);
+  }
+
+  struct Writer {
+    constexpr bool is_thread_safe() {
+      return false;
+    }
+
+    static void write(Multiplexer* sink, Frame* frame) {
+      write(sink->sinks_, frame, std::index_sequence_for<Sinks_*...>());
+    }
+
+    void operator()(Multiplexer* sink, Frame* frame) {
+      write(sink, frame);
+    }
+
+    private:
+    template<class Sink_>
+    static void write(Sink_* sink, Frame* frame) {
+        Sink_::Writer::write(sink, frame);
+        frame->pop<typename Sink_::Element>();
+      }
+
+    template<std::size_t... Index_>
+    static void write(const std::tuple<Sinks_*...>& sinks, Frame* frame, 
+                      std::index_sequence<Index_...>) {
+        // wtf is this shit.
+        using swallow = int[];
+        (void)swallow{0, (void(write(std::get<Index_>(sinks), frame)), 0)...};
+      }
+  };
+  std::tuple<Sinks_*...> sinks_;
 };
 
 }  // namespace radiance
