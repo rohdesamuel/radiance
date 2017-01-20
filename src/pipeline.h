@@ -10,6 +10,7 @@
 
 #include "system.h"
 #include <vector>
+#include <omp.h>
 
 namespace radiance
 {
@@ -17,6 +18,7 @@ namespace radiance
 class BasePipeline {
  public:
   BasePipeline() {}
+  ~BasePipeline() {}
 
   std::vector<Id> add(std::vector<System> systems) {
     return systems_.push(systems);
@@ -32,6 +34,36 @@ class BasePipeline {
 
 protected:
   SystemExecutor systems_;
+};
+
+template<typename Source_, typename Sink_>
+class Pipeline_ : public BasePipeline {
+ public:
+  template<typename Reader_, typename Writer_>
+  Pipeline_(Source_* source, Sink_* sink,
+            Reader_ reader, Writer_ writer):
+      source_(source),
+      sink_(sink),
+      reader_(reader),
+      writer_(writer) {
+    frames_ = new Frame [1];
+  }
+
+  ~Pipeline_() {
+    delete[] frames_;
+  }
+
+  void operator()(void) {
+
+    reader_(source_, systems_);
+  }
+
+ private:
+  System reader_;
+  System writer_;
+  Source_* source_;
+  Sink_* sink_;
+  Frame* frames_;
 };
 
 template<typename Source_, typename Sink_>

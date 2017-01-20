@@ -14,47 +14,56 @@
 namespace radiance
 {
 
-template<size_t size>
+template<size_t max_size>
 class StackMemory {
 private:
-  uint8_t stack_[size];
+  struct StackFrame {
+    size_t size;
+  };
+
+  uint8_t stack_[max_size];
+  // Always points to the next empty piece of memory.
   uint8_t* top_;
+  uint8_t* ceiling_;
 
 public:
-  StackMemory() : top_(stack_) {}
+  StackMemory() : top_(stack_), ceiling_(stack_ + max_size) {}
   ~StackMemory() {
     clear();
-  }
-
-  void* push(size_t type_size) {
-    return alloc(type_size);
-  }
-
-  void* pop(size_t type_size) {
-    void* ret = nullptr;
-
-    if (top_ - type_size >= stack_) {
-      std::cout << (int*)top_ << std::endl;
-      top_ -= type_size;
-      std::cout << (int*)top_ << std::endl;
-      ret = top_;
-      std::cout << "size: " << type_size << std::endl;
-    }
-
-    DEBUG_ASSERT(ret, Status::Code::MEMORY_OUT_OF_BOUNDS);
-    return ret;
   }
 
   void* alloc(size_t type_size) {
     void* ret = nullptr;
 
-    if (type_size + top_ <= stack_ + size) {
+    StackFrame frame{type_size};
+    uint8_t* new_top = top_ + type_size + sizeof(StackFrame);
+    if (new_top <= ceiling_) {
+      *(StackFrame*)(new_top - sizeof(StackFrame)) = frame;
       ret = top_;
-      top_ += type_size;
+      top_ = new_top;
     }
 
     DEBUG_ASSERT(ret, Status::Code::MEMORY_OUT_OF_BOUNDS);
     return ret;
+  }
+
+  // Return pointer to value that is on the top of the stack.
+  void* top() const {
+    void* ret = nullptr;
+
+    StackFrame* frame = (StackFrame*)(top_ - sizeof(StackFrame));
+    if ((uint8_t*)(frame) >= stack_) {
+      ret = top_ - sizeof(StackFrame) - frame->size;
+    }
+
+    return ret;
+  }
+
+  void free() {
+    StackFrame* frame = (StackFrame*)(top_ - sizeof(StackFrame));
+    if ((uint8_t*)(frame) >= stack_) {
+      top_ = top_ - sizeof(StackFrame) - frame->size;
+    }
   }
 
   template<typename Type_>

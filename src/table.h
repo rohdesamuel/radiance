@@ -191,8 +191,6 @@ public:
 
     static void write(Table* table, Frame* frame) {
       Element* el = frame->result<Element>();
-      std::cout << table << std::endl;
-      std::cout << el->value << std::endl;
       switch (el->indexed_by) {
         case IndexedBy::OFFSET:
           table->values[el->offset] = std::move(el->value);
@@ -533,47 +531,71 @@ private:
   ::boost::lockfree::queue<Mutation> mutations_;
 };
 
-/*
+
+// One writer that writes to multiple sinks.
 template<class... Sinks_>
-class Multiplexer {
+class Mux {
  public:
-  Multiplexer(Sinks_*... sinks) {
-    sinks_ = { sinks... };
+  Mux(Sinks_*... sinks) {
+    sinks_ = std::tuple<Sinks_*...>(sinks...);
   }
 
-  constexpr bool is_thread_safe() {
-    return false;
-  }
-
-  static void write(Multiplexer* sink, Frame* frame) {
-    std::vector<void*> tables = sink->sinks_;
-    sink->write<Sinks_...>(frame, &tables);
-  }
-
-  void operator()(Multiplexer* sink, Frame* frame) {
-    write(sink, frame);
+  void operator()(Frame* frame) {
+    write(sinks_, frame, std::index_sequence_for<Sinks_*...>());
   }
 
  private:
-  template<class Table_>
-  void write(Frame* frame, void* table) {
-    Table_::Writer::write((Table_*)table, frame);
-    frame->pop<typename Table_::Element>();
+  template<class Sink_>
+  static void write(Sink_* sink, Frame* frame) {
+    Sink_::Writer::write(sink, frame);
+    frame->pop();
   }
 
-  template<class Table_, class... Args_>
-  void write(Frame* frame, std::vector<void*>* tables) {
-    write<Table_>(frame, tables->back());
-    tables->pop_back();
-    write<Args_...>(frame, tables);
+  template<std::size_t... Index_>
+  static void write(const std::tuple<Sinks_*...>& sinks, Frame* frame, 
+      std::index_sequence<Index_...>) {
+    // wtf is this shit.
+    using swallow = int[];
+    (void)swallow{0, (void(write(std::get<sizeof...(Index_) - 1 - Index_>(sinks), frame)), 0)...};
   }
 
-  std::vector<void*> sinks_;
-};*/
-template<class... Sinks_>
-class Multiplexer {
+  std::tuple<Sinks_*...> sinks_;
+};
+
+template<class... Sources_>
+class Demux {
  public:
-  Multiplexer(Sinks_*... sinks) {
+  Demux(Sources_*... sources) {
+    sources_ = std::tuple<Sources_*...>(sources...);
+  }
+
+  void operator()(Frame* frame) {
+    read(sources_, frame, std::index_sequence_for<Sources_*...>());
+  }
+
+ private:
+  template<class Source_>
+  static void read(Source_* source, Frame* frame) {
+    Source_::Writer::write(source, frame);
+    frame->pop();
+  }
+
+  template<std::size_t... Index_>
+  static void read(const std::tuple<Sources_*...>& sources, Frame* frame, 
+      std::index_sequence<Index_...>) {
+    // wtf is this shit.
+    using swallow = int[];
+    (void)swallow{0, (void(write(std::get<sizeof...(Index_) - 1 - Index_>(sources), frame)), 0)...};
+  }
+
+  std::tuple<Sources_*...> sources_;
+};
+// One writer that writes to multiple sinks.
+/*
+template<class... Sinks_>
+class Mux {
+ public:
+  Mux(Sinks_*... sinks) {
     sinks_ = std::tuple<Sinks_*...>(sinks...);
   }
 
@@ -582,11 +604,11 @@ class Multiplexer {
       return false;
     }
 
-    static void write(Multiplexer* sink, Frame* frame) {
+    static void write(Mux* sink, Frame* frame) {
       write(sink->sinks_, frame, std::index_sequence_for<Sinks_*...>());
     }
 
-    void operator()(Multiplexer* sink, Frame* frame) {
+    void operator()(Mux* sink, Frame* frame) {
       write(sink, frame);
     }
 
@@ -594,7 +616,7 @@ class Multiplexer {
     template<class Sink_>
     static void write(Sink_* sink, Frame* frame) {
         Sink_::Writer::write(sink, frame);
-        frame->pop<typename Sink_::Element>();
+        frame->pop();
       }
 
     template<std::size_t... Index_>
@@ -602,11 +624,51 @@ class Multiplexer {
                       std::index_sequence<Index_...>) {
         // wtf is this shit.
         using swallow = int[];
-        (void)swallow{0, (void(write(std::get<Index_>(sinks), frame)), 0)...};
+        (void)swallow{0, (void(write(std::get<sizeof...(Index_) - 1 - Index_>(sinks), frame)), 0)...};
       }
   };
   std::tuple<Sinks_*...> sinks_;
 };
+
+// One reader that reads from multiple readers.
+template<class Sink_, class... Sources_>
+class Demux {
+ public:
+  Demux(Sources_*... sources) {
+    sources_ = std::tuple<Sources_*...>(sources...);
+  }
+
+  struct Reader {
+    constexpr bool is_thread_safe() {
+      return false;
+    }
+
+    static void read(Demux* source, Frame* frame) {
+      read(source->sources_, frame, std::index_sequence_for<Sources_*...>());
+    }
+
+    void operator()(Demux* source, Frame* frame) {
+      write(source, frame);
+    }
+
+    private:
+    template<class Source_>
+    static void read(Source_* source, Frame* frame) {
+        Source_::Reader::read(source, frame);
+        frame->pop();
+      }
+
+    template<std::size_t... Index_>
+    static void write(const std::tuple<Sources_*...>& sources, Frame* frame, 
+                      std::index_sequence<Index_...>) {
+        // wtf is this shit.
+        using swallow = int[];
+        (void)swallow{0,
+            (void(write(std::get<sizeof...(Index_) - 1 - Index_>(sources), frame)), 0)...};
+      }
+  };
+  std::tuple<Sources_*...> sources_;
+};*/
 
 }  // namespace radiance
 

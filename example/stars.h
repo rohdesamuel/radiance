@@ -66,7 +66,7 @@ class Stars {
   }
   
   static void update(Frame* frame) {
-    auto* e = frame->result<Schema::Element>();
+    auto* e = frame->result<Transformations::Element>();
     e->value.p += e->value.v;
   }
 
