@@ -13,39 +13,28 @@
 BEGIN_EXTERN_C
 
 namespace radiance {
-
 struct Args {
   size_t arg_size;
   uint8_t* args;
 };
 
-struct Source {
-  void (*reader)(Source*, ...);
-  size_t arg_size;
-  uint8_t* args;
+typedef bool (*Select)(uint8_t, ...);
+typedef void (*Read)(struct Collection*, ...);
+typedef void (*Write)(struct Collection*, ...);
+
+struct _Pipeline {
+  struct Collection* source = nullptr;
+  struct Collection* sink = nullptr;
+
+  Stack stack;
+  Select select;
+  Read read;
+  Write write;
 };
 
-struct Sink {
-  void (*writer)(Sink*, ...);
-  size_t arg_size;
-  uint8_t* args;
-};
-
-int32_t reader(Source* source, Args* args);
-
-struct Pipe {
-  Source* source = nullptr;
-  Sink* sink = nullptr;
-  void run() {
-    if (source && sink) {
-
-    }
-  }
-};
-
-
-int32_t start(Universe* u, Program* p);
+int32_t start(Universe* u);
 int32_t stop(Universe* u);
+Universe* universe();
 
 namespace program {
 

@@ -9,6 +9,8 @@
 #define PIPELINE__H
 
 #include "system.h"
+#include "type.h"
+
 #include <vector>
 #include <omp.h>
 
@@ -24,10 +26,6 @@ class BasePipeline {
     return systems_.push(systems);
   }
 
-  Id add(System& system) {
-    return systems_.push(system);
-  }
-
   void erase(Id id) {
     systems_.erase(id);
   }
@@ -39,31 +37,17 @@ protected:
 template<typename Source_, typename Sink_>
 class Pipeline_ : public BasePipeline {
  public:
-  template<typename Reader_, typename Writer_>
-  Pipeline_(Source_* source, Sink_* sink,
-            Reader_ reader, Writer_ writer):
-      source_(source),
-      sink_(sink),
-      reader_(reader),
-      writer_(writer) {
-    frames_ = new Frame [1];
-  }
+  Pipeline_() {}
 
-  ~Pipeline_() {
-    delete[] frames_;
-  }
 
   void operator()(void) {
-
-    reader_(source_, systems_);
+    reader_();
   }
 
  private:
-  System reader_;
-  System writer_;
+  std::function<void()> reader_;
   Source_* source_;
   Sink_* sink_;
-  Frame* frames_;
 };
 
 template<typename Source_, typename Sink_>

@@ -23,17 +23,29 @@ private:
   Function f_;
 
 public:
-  System() {}
+  template<typename Function_, typename... State_>
+  static System Bind(Function_ f, State_... state) {
+    System s;
+    s.f_ = [=](Frame* frame) {
+      return f(frame, state...);
+    };
+    return s;
+  }
+
+  System() {
+    f_ = [](Frame*){};
+  }
 
   template<typename Function_>
   System(Function_ f) : f_(f) {}
 
+  /*
   template<typename Function_, typename... State_>
   System(Function_ f, State_... state) {
     f_ = [=](Frame* frame) {
       return f(frame, state...);
     };
-  }
+  }*/
 
   inline void operator()(Frame* frame) const {
     f_(frame);
@@ -54,13 +66,13 @@ class SystemExecutor {
   typedef typename Systems::const_iterator const_iterator;
 
   SystemExecutor() {}
-  SystemExecutor(System back): back_(back) {}
+  SystemExecutor(System callback): callback_(callback) {}
 
   void operator()(Frame* frame) const {
     for(auto& el : systems_) {
       el.system(frame);
     }
-    back_(frame);
+    callback_(frame);
   }
 
   std::vector<Id> push(std::vector<System> systems) {
@@ -72,14 +84,8 @@ class SystemExecutor {
     return ret;
   }
 
-  Id push(System system) {
-    Id new_id = id_++;  
-    systems_.push_back({new_id, system});
-    return new_id;
-  }
-
-  System& back() {
-    return back_;
+  System& callback() {
+    return callback_;
   }
 
   void erase(iterator it) {
@@ -112,8 +118,14 @@ class SystemExecutor {
   }
 
  private:
+  Id push(System system) {
+    Id new_id = id_++;  
+    systems_.push_back({new_id, system});
+    return new_id;
+  }
+
   Systems systems_;
-  System back_ = [](Frame*){};
+  System callback_ = [](Frame*){};
   Id id_;
 };
 

@@ -7,7 +7,6 @@
 
 #include <atomic>
 
-#if 0
 const static int32_t RADIUS = 10;
 
 using radiance::Frame;
@@ -16,15 +15,17 @@ struct Color {
   glm::vec3 c;
 };
 
-class Stars {
-  typedef radiance::Schema<uint32_t, Color> Rendering;
+typedef radiance::Schema<uint32_t, Color> Rendering;
 
+class Stars {
+ public:
   struct Components {
     radiance::Handle transformation_handle;
     radiance::Handle rendering_handle;
   };
 
   struct CreateArgs {
+    glm::vec3 v;
     glm::vec3 p;
   };
 
@@ -56,17 +57,23 @@ class Stars {
   }
 
   static void create(Frame* frame) {
-    auto* e = frame->result<CreateArgs>();
-    Transformations::Mutation m;
-    m.el.indexed_by = radiance::IndexedBy::KEY;
-    Transformation t;
-    t.v = glm::vec3{0, 0, 0};
-    t.p = e->p;
-    //frame->result<Transformations::Mutation>(std::move(t));
+    auto* args = frame->peek<CreateArgs>();
+    Transformations::Mutation tm;
+    tm.mutate_by = radiance::MutateBy::INSERT;
+    tm.el.key = 0;
+    tm.el.value.v = args->v;
+    tm.el.value.v = args->p;
+    frame->push<Transformations::Mutation>(std::move(tm));
+
+    Rendering::Mutation rm;
+    rm.mutate_by = radiance::MutateBy::INSERT;
+    rm.el.key = 0;
+    rm.el.value.c = glm::vec3{1.0f, 0.0f, 0.0f};
+    frame->push<Rendering::Mutation>(std::move(rm));
   }
   
   static void update(Frame* frame) {
-    auto* e = frame->result<Transformations::Element>();
+    auto* e = frame->peek<Transformations::Element>();
     e->value.p += e->value.v;
   }
 
@@ -82,7 +89,5 @@ class Stars {
   std::atomic_uint id_;
 
 };
-
-#endif
 
 #endif  // STARS__H

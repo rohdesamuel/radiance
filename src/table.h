@@ -86,45 +86,13 @@ public:
 
     static void iterate_table(Table* table, SystemExecutor& system,
                               std::function<Element(Table*, int64_t)>&& reader) {
-#if 1
 #pragma omp parallel for
       for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
         thread_local static Frame frame;
         frame.clear();
-        frame.result(reader(table, i));
+        frame.peek(reader(table, i));
         system(&frame);
       }
-#else
-#pragma omp parallel
-      {
-        auto it = system.begin();
-        auto end = system.end();
-        thread_local static std::vector<Frame> frames;
-        if (table->size() > frames.size()) {
-          frames.resize(table->size());
-        }
-
-        do {
-          System& sys = it->system;
-#pragma omp parallel for
-          for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
-            Frame& frame = frames[i];
-            if (it == system.begin()) {
-              frame.clear();
-              frame.result(reader(table, i));
-            }
-            sys(&frame);
-          }
-          ++it;
-        } while(it != end);
-
-#pragma omp parallel for
-        for (int64_t i = 0; i < (int64_t)table->size(); ++i) {
-          Frame& frame = frames[i];
-          (system.back())(&frame);
-        }
-      }
-#endif
     }
 
     inline static Element get_by_offset(Table* table, int64_t index) {
@@ -190,7 +158,7 @@ public:
     }
 
     static void write(Table* table, Frame* frame) {
-      Element* el = frame->result<Element>();
+      Element* el = frame->peek<Element>();
       switch (el->indexed_by) {
         case IndexedBy::OFFSET:
           table->values[el->offset] = std::move(el->value);
@@ -358,7 +326,7 @@ public:
       for (int64_t i = 0; i < (int64_t)view->size(); ++i) {
         thread_local static Frame frame;
         frame.clear();
-        frame.result(reader(view, i));
+        frame.peek(reader(view, i));
         system(&frame);
       }
     }
@@ -518,7 +486,7 @@ public:
     }
 
     static void write(MutationBuffer* queue, Frame* frame) {
-      Element* el = frame->result<Element>();
+      Element* el = frame->peek<Element>();
       queue->push(std::move(*el));
     }
 
@@ -534,9 +502,9 @@ private:
 
 // One writer that writes to multiple sinks.
 template<class... Sinks_>
-class Mux {
+class Mux_ {
  public:
-  Mux(Sinks_*... sinks) {
+  Mux_(Sinks_*... sinks) {
     sinks_ = std::tuple<Sinks_*...>(sinks...);
   }
 
@@ -563,9 +531,9 @@ class Mux {
 };
 
 template<class... Sources_>
-class Demux {
+class Demux_ {
  public:
-  Demux(Sources_*... sources) {
+  Demux_(Sources_*... sources) {
     sources_ = std::tuple<Sources_*...>(sources...);
   }
 
@@ -591,7 +559,6 @@ class Demux {
   std::tuple<Sources_*...> sources_;
 };
 // One writer that writes to multiple sinks.
-/*
 template<class... Sinks_>
 class Mux {
  public:
@@ -631,10 +598,10 @@ class Mux {
 };
 
 // One reader that reads from multiple readers.
-template<class Sink_, class... Sources_>
+template<class Key_, class... Sources_>
 class Demux {
  public:
-  Demux(Sources_*... sources) {
+  Demux(Key_* key, Sources_*... sources) : key_(key) {
     sources_ = std::tuple<Sources_*...>(sources...);
   }
 
@@ -647,28 +614,33 @@ class Demux {
       read(source->sources_, frame, std::index_sequence_for<Sources_*...>());
     }
 
-    void operator()(Demux* source, Frame* frame) {
-      write(source, frame);
+    void operator()(Demux* source, SystemExecutor& system) {
+      uint64_t size = source->key_->size();
+      for (uint64_t i = 0; i < size; ++i) {
+        thread_local static Frame frame;
+        read(source->sources_, frame, std::index_sequence_for<Sources_*...>());
+        system(&frame);
+      }
     }
 
-    private:
+   private:
     template<class Source_>
     static void read(Source_* source, Frame* frame) {
         Source_::Reader::read(source, frame);
-        frame->pop();
       }
 
     template<std::size_t... Index_>
-    static void write(const std::tuple<Sources_*...>& sources, Frame* frame, 
+    static void read(const std::tuple<Sources_*...>& sources, Frame* frame, 
                       std::index_sequence<Index_...>) {
         // wtf is this shit.
         using swallow = int[];
         (void)swallow{0,
-            (void(write(std::get<sizeof...(Index_) - 1 - Index_>(sources), frame)), 0)...};
+            (void(read(std::get<sizeof...(Index_) - 1 - Index_>(sources), frame)), 0)...};
       }
   };
+  Key_* key_;
   std::tuple<Sources_*...> sources_;
-};*/
+};
 
 }  // namespace radiance
 

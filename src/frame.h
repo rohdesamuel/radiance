@@ -12,7 +12,7 @@ namespace radiance
 
 class Frame {
 private:
-  StackMemory<512> stack_;
+  Stack stack_;
   void* ret_ = nullptr;
 
 public:

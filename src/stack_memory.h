@@ -11,24 +11,25 @@
 #include "common.h"
 #include <memory.h>
 
+static const int MAX_SIZE = 512;
+
 namespace radiance
 {
 
-template<size_t max_size>
-class StackMemory {
+class Stack {
 private:
   struct StackFrame {
     size_t size;
   };
 
-  uint8_t stack_[max_size];
+  uint8_t stack_[MAX_SIZE];
   // Always points to the next empty piece of memory.
   uint8_t* top_;
   uint8_t* ceiling_;
 
 public:
-  StackMemory() : top_(stack_), ceiling_(stack_ + max_size) {}
-  ~StackMemory() {
+  Stack() : top_(stack_), ceiling_(stack_ + MAX_SIZE) {}
+  ~Stack() {
     clear();
   }
 
@@ -64,13 +65,6 @@ public:
     if ((uint8_t*)(frame) >= stack_) {
       top_ = top_ - sizeof(StackFrame) - frame->size;
     }
-  }
-
-  template<typename Type_>
-  void free(Type_* t) {
-    DEBUG_OP(
-      memset((void*)t, 0, sizeof(Type_));
-    );
   }
 
   void clear() {

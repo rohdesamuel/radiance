@@ -2,12 +2,13 @@
 #define UNIVERSE__H
 
 #include "program.h"
+#include "source_manager.h"
 
 namespace radiance {
 
 // Holds the game engine state.
 struct Universe {
-  Program* program;
+  SourceManager* source_manager;
 };
 
 }  // namespace radiance
