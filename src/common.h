@@ -83,7 +83,8 @@ struct Status {
     NULL_POINTER,
     UNKNOWN_INDEXED_BY_VALUE,
     INCOMPATIBLE_DATA_TYPES,
-    FAILED_INITIALIZATION
+    FAILED_INITIALIZATION,
+    BAD_RUN_STATE,
   };
 
   Status(Code code=Code::OK, const char* message=""):

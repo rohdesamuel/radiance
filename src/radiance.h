@@ -15,34 +15,51 @@ BEGIN_EXTERN_C
 
 namespace radiance {
 
-typedef void (*Insert)(struct Collection*, void* element);
-typedef void (*Update)(struct Collection*, void* element);
-typedef void (*Remove)(struct Collection*, void* key);
-typedef bool (*Iterate)(struct Collection*, struct Stack*, void* state);
+struct Element {
+  uint8_t* data;
+  size_t size;
+};
 
-struct Collection {
-  void* data;
-  uint64_t count;
-  size_t key_size;
-  size_t value_size;
+enum class MutateBy {
+  UNKNOWN = 0,
+  INSERT,
+  UPDATE,
+  REMOVE
+};
 
-  Insert insert;
-  Update update;
-  Remove remove;
-  Iterate iterate;
+struct Mutation {
+  Element* element;
+  MutateBy mutate_by;
 };
 
 typedef bool (*Select)(uint8_t, ...);
-typedef void (*Read)(struct Collection*, ...);
-typedef void (*Write)(struct Collection*, ...);
+typedef Mutation (*Transform)(struct Stack*);
+
+typedef void (*Mutate)(struct Collection*, const Mutation*);
+
+// Put the next element onto the stack. Gives nullptr as state to begin. Return
+// nullptr if at end.
+typedef uint8_t* (*Iterate)(struct Collection*, struct Stack*, uint8_t* state);
+
+struct Collection {
+  const Id id;
+  uint8_t* self;
+
+  uint64_t count;
+  size_t key_size;
+  size_t value_size;
+  size_t state_size;
+
+  Mutate mutate;
+  Iterate iterate;
+};
 
 struct Pipeline {
   const Id id;
   uint8_t priority;
 
   Select select;
-  Read read;
-  Write write;
+  Transform transform;
 };
 
 struct Program {
