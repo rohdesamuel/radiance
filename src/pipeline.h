@@ -35,22 +35,6 @@ protected:
 };
 
 template<typename Source_, typename Sink_>
-class Pipeline_ : public BasePipeline {
- public:
-  Pipeline_() {}
-
-
-  void operator()(void) {
-    reader_();
-  }
-
- private:
-  std::function<void()> reader_;
-  Source_* source_;
-  Sink_* sink_;
-};
-
-template<typename Source_, typename Sink_>
 class Pipeline: public BasePipeline {
 public:
   typedef Source_ Source;

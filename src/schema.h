@@ -9,8 +9,6 @@
 #define SCHEMA__H
 
 #include "common.h"
-#include "pipeline.h"
-#include "system.h"
 #include "table.h"
 
 namespace radiance

@@ -1,6 +1,8 @@
-#include "src/table.h"
 #include "src/radiance.h"
-#include "stars.h"
+#include "src/table.h"
+#include "src/schema.h"
+
+#include <glm/glm.hpp>
 
 #include <unordered_map>
 
@@ -8,28 +10,7 @@ typedef std::vector<glm::vec3> Vectors;
 
 namespace radiance {
 
-struct Collection {
-  uint8_t* keys;
-  uint8_t* values;
-  uint64_t count;
-  size_t key_size;
-  size_t value_size;
-};
-
-void retrieve(Collection* collection, Stack* stack, uint64_t pos) {
-  uint8_t* mem = (uint8_t*)stack->alloc(collection->key_size);
-  memcpy(collection->keys + pos * collection->key_size, mem, collection->key_size);
-
-  mem = (uint8_t*)stack->alloc(collection->value_size);
-  memcpy(collection->values + pos * collection->value_size, mem, collection->value_size);
-}
-
-Collection run_pipeline(struct _Pipeline* pipeline) {
-  pipeline->read(pipeline->source, &pipeline->stack);
-  return Collection{};
-}
-
-
+#if 0
 template <class... Sources_>
 class Entity {
  public:
@@ -131,17 +112,56 @@ class Iterator {
  private:
   Options options_;
 };
+#endif
 
 }  // namespace radiance
 
+struct Transformation {
+  glm::vec3 p;
+  glm::vec3 v;
+};
+
+typedef radiance::Schema<uint32_t, Transformation> Transformations;
+
 int main() {
-  using radiance::Pipeline;
-  using radiance::Mux;
-  using radiance::Type;
-
   radiance::Universe uni;
-  radiance::start(&uni);
+  radiance::init(&uni);
 
+  radiance::create_program("physics");
+  radiance::Collection* transformations =
+      radiance::add_collection("physics", "transformations");
+
+  Transformations::Table* table = new Transformations::Table();
+  radiance::Insert insert = [](radiance::Collection* c, void* e) {
+    Transformations::Table* t = (Transformations::Table*)c->data;
+    Transformations::Element* el = (Transformations::Element*)e;
+    t->insert(el->key, el->value);
+  };
+  transformations->data = table;
+  transformations->insert = insert;
+
+  radiance::Pipeline* pipeline =
+      radiance::add_pipeline("physics", "transformations", "transformations");
+  pipeline->select = nullptr;
+  pipeline->read = nullptr;
+  pipeline->write = nullptr;
+
+  radiance::create_program("render");
+  radiance::add_collection("render", "meshes");
+  radiance::share_collection("physics/transformations", "render/transformations");
+
+  radiance::Pipeline* render_pipeline =
+      radiance::add_pipeline("render", "transformations", nullptr);
+  radiance::add_source(render_pipeline, "render/meshes");
+  render_pipeline->select = nullptr;
+  render_pipeline->read = nullptr;
+  render_pipeline->write = nullptr;
+
+  radiance::start();
+  radiance::loop();
+  radiane::stop();
+
+  /*
   typedef radiance::Schema<int, Vectors> A;
   typedef radiance::Schema<int, int> B;
 
@@ -149,10 +169,6 @@ int main() {
   B::Table b;
 
   radiance::SourceManager sources;
-  Transformations::Table transformations;
-
-  Type<Transformations::Table> type_a = sources.insert(&transformations);
-  typename decltype(type_a)::Typedef ptr_a = sources[type_a];
 
   a.insert(0, { glm::vec3{0, 1, 2} });
   b.insert(0, 3);
@@ -165,22 +181,6 @@ int main() {
   radiance::System y([](radiance::Frame*) { std::cout << "y\n"; });
   radiance::System z([](radiance::Frame*) { std::cout << "z\n"; });
   radiance::System end([](radiance::Frame*) { std::cout << "end\n"; });
-
-  typedef radiance::Entity<Transformations::Table, Rendering::Table> Stars;
-  Rendering::Table rendering;
-
-  Stars stars(&transformations, &rendering);
-  stars.components.insert(0,
-      {transformations.insert(0, {}),
-       rendering.insert(0, {})});
-  stars.components.insert(1,
-      {transformations.insert(1, {}),
-       rendering.insert(1, {})});
-
-  Stars::Reader r;
-  radiance::SystemExecutor executor;
-  executor.push({ x, y, z });
-  r(&stars, executor);
 
 
   Mux<A::Table, B::Table> mux(&a, &b);
@@ -201,8 +201,9 @@ int main() {
     frame.push(el);
   }
 
-  frame.pop();
 
+  frame.pop();
+*/
 
   return 0;
 }

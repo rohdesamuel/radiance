@@ -8,44 +8,63 @@
 #ifndef RADIANCE__H
 #define RADIANCE__H
 
+#include "common.h"
 #include "universe.h"
 
 BEGIN_EXTERN_C
 
 namespace radiance {
-struct Args {
-  size_t arg_size;
-  uint8_t* args;
+
+typedef void (*Insert)(struct Collection*, void* element);
+typedef void (*Update)(struct Collection*, void* element);
+typedef void (*Remove)(struct Collection*, void* key);
+typedef bool (*Iterate)(struct Collection*, struct Stack*, void* state);
+
+struct Collection {
+  void* data;
+  uint64_t count;
+  size_t key_size;
+  size_t value_size;
+
+  Insert insert;
+  Update update;
+  Remove remove;
+  Iterate iterate;
 };
 
 typedef bool (*Select)(uint8_t, ...);
 typedef void (*Read)(struct Collection*, ...);
 typedef void (*Write)(struct Collection*, ...);
 
-struct _Pipeline {
-  struct Collection* source = nullptr;
-  struct Collection* sink = nullptr;
+struct Pipeline {
+  const Id id;
+  uint8_t priority;
 
-  Stack stack;
   Select select;
   Read read;
   Write write;
 };
 
-int32_t start(Universe* u);
-int32_t stop(Universe* u);
-Universe* universe();
-
-namespace program {
-
-struct Options {
-  uint8_t cores = 1;
+struct Program {
+  void* self;
 };
 
-Status::Code create_program(Options opts, Program** program);
-Status::Code attach_process(Program* program, Process* process);
+Universe* universe();
 
-}  // namespace program
+Status::Code init(Universe* universe);
+Status::Code start();
+Status::Code stop();
+Status::Code loop();
+
+Id create_program(const char* name);
+Pipeline* add_pipeline(const char* program, const char* source, const char* sink);
+Collection* add_collection(const char* program, const char* name);
+
+Status::Code add_source(Pipeline*, const char* collection);
+Status::Code add_sink(Pipeline*, const char* collection);
+
+Status::Code share_collection(const char* source, const char* dest);
+Status::Code copy_collection(const char* source, const char* dest);
 
 }  // namespace radiance
 

@@ -43,6 +43,7 @@ do{ if (!(expr)) exit(exit_code); } while (0)
 #endif  // ifdef __cplusplus
 
 #include <cstdint>
+using std::size_t;
 
 namespace radiance
 {
@@ -75,6 +76,7 @@ typedef int64_t Id;
 
 struct Status {
   enum Code {
+    UNKNOWN = -1,
     OK = 0,
     MEMORY_LEAK,
     MEMORY_OUT_OF_BOUNDS,
@@ -96,8 +98,6 @@ struct Status {
     return code == Code::OK;
   }
 };
-
-using std::size_t;
 
 }  // namespace radiance
 
