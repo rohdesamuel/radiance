@@ -132,19 +132,37 @@ int main() {
       radiance::add_collection("physics", "transformations");
 
   Transformations::Table* table = new Transformations::Table();
-  radiance::Insert insert = [](radiance::Collection* c, void* e) {
-    Transformations::Table* t = (Transformations::Table*)c->data;
-    Transformations::Element* el = (Transformations::Element*)e;
+  radiance::Mutate mutate = [](radiance::Collection* c, const radiance::Mutation* m) {
+    Transformations::Table* t = (Transformations::Table*)c->self;
+    Transformations::Element* el = (Transformations::Element*)(m->element);
     t->insert(el->key, el->value);
   };
-  transformations->data = table;
-  transformations->insert = insert;
+  radiance::Iterate iterate = [](radiance::Collection* c, radiance::Stack* s, uint8_t* state) -> uint8_t* {
+    thread_local static uint64_t index = 0;
+    uint64_t* ret = &index;
+    Transformations::Table* t = (Transformations::Table*)c->self;
+
+    if (state == nullptr) {
+      index = 0;
+    } else {
+      ++index;
+      if (index >= t->size()) {
+        return (uint8_t*)nullptr;
+      }
+    }
+    std::tuple<Transformations::Key, Transformations::Value> el{t->key(index), t->value(index)};
+    *((std::tuple<Transformations::Key, Transformations::Value>*)(s->alloc(sizeof(el)))) = el;
+
+    return (uint8_t*)ret;
+  };
+
+  transformations->self = (uint8_t*)table;
+  transformations->mutate = mutate;
+  transformations->iterate = iterate;
 
   radiance::Pipeline* pipeline =
       radiance::add_pipeline("physics", "transformations", "transformations");
   pipeline->select = nullptr;
-  pipeline->read = nullptr;
-  pipeline->write = nullptr;
 
   radiance::create_program("render");
   radiance::add_collection("render", "meshes");
@@ -154,12 +172,11 @@ int main() {
       radiance::add_pipeline("render", "transformations", nullptr);
   radiance::add_source(render_pipeline, "render/meshes");
   render_pipeline->select = nullptr;
-  render_pipeline->read = nullptr;
-  render_pipeline->write = nullptr;
+  render_pipeline->transform = [](radiance::Stack*){};
 
   radiance::start();
   radiance::loop();
-  radiane::stop();
+  radiance::stop();
 
   /*
   typedef radiance::Schema<int, Vectors> A;

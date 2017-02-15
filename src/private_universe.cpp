@@ -2,6 +2,12 @@
 
 #include <algorithm>
 
+namespace {
+  std::string form_path(const char* program, const char* resource) {
+    return std::string{program} + radiance::NAMESPACE_DELIMETER + std::string{resource};
+  }
+}  // namespace
+
 namespace radiance {
 
 PrivateUniverse::PrivateUniverse():
@@ -33,6 +39,7 @@ Status::Code PrivateUniverse::start() {
 }
 
 Status::Code PrivateUniverse::loop() {
+
   return transition({RunState::RUNNING, RunState::STARTED}, RunState::RUNNING);
 }
 
@@ -41,36 +48,50 @@ Status::Code PrivateUniverse::stop() {
 }
 
 Id PrivateUniverse::create_program(const char* name) {
-  Id ret = -1;
-  if (programs_.find(name) == programs_.end()) {
-    ret = programs_.size();
-    programs_[name] = new Program();
-  }
-  return ret;
+  return programs_.create_program(name); 
 }
 
 Pipeline* PrivateUniverse::add_pipeline(const char* program, const char* source, const char* sink) {
-  
-  return nullptr;
+  Program* p = programs_.get_program(program);
+  if (!p) {
+    return nullptr;
+  }
+
+  Collection* src = collections_.get(form_path(program, source).data());
+  Collection* snk = collections_.get(form_path(program, sink).data());
+
+  return programs_.to_impl(p)->add_pipeline(src, snk);;
 }
 
 Collection* PrivateUniverse::add_collection(const char* program, const char* name) {
-  return nullptr;
+  return collections_.add(program, name);
 }
 
 Status::Code PrivateUniverse::add_source(Pipeline* pipeline, const char* source) {
-  return Status::OK;
+  Program* p = programs_.get_program(pipeline->program);
+  if (!p) {
+    return Status::NULL_POINTER;
+  }
+
+  Collection* src = collections_.get(source);
+  return programs_.to_impl(p)->add_source(pipeline, src);
 }
 
 Status::Code PrivateUniverse::add_sink(Pipeline* pipeline, const char* sink) {
+  Program* p = programs_.get_program(pipeline->program);
+  if (!p) {
+    return Status::NULL_POINTER;
+  }
+
+  Collection* snk = collections_.get(sink);
+  return programs_.to_impl(p)->add_source(pipeline, snk);
+}
+
+Status::Code PrivateUniverse::share_collection(const char*, const char*) {
   return Status::OK;
 }
 
-Status::Code PrivateUniverse::share_collection(const char* source, const char* dest) {
-  return Status::OK;
-}
-
-Status::Code PrivateUniverse::copy_collection(const char* source, const char* dest) {
+Status::Code PrivateUniverse::copy_collection(const char*, const char*) {
   return Status::OK;
 }
 

@@ -85,6 +85,8 @@ struct Status {
     INCOMPATIBLE_DATA_TYPES,
     FAILED_INITIALIZATION,
     BAD_RUN_STATE,
+    DOES_NOT_EXIST,
+    ALREADY_EXISTS,
   };
 
   Status(Code code=Code::OK, const char* message=""):

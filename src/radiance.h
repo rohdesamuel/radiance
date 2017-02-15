@@ -33,7 +33,7 @@ struct Mutation {
 };
 
 typedef bool (*Select)(uint8_t, ...);
-typedef Mutation (*Transform)(struct Stack*);
+typedef void (*Transform)(struct Stack*);
 
 typedef void (*Mutate)(struct Collection*, const Mutation*);
 
@@ -45,9 +45,6 @@ struct Collection {
   const Id id;
   uint8_t* self;
 
-  uint64_t count;
-  size_t key_size;
-  size_t value_size;
   size_t state_size;
 
   Mutate mutate;
@@ -56,6 +53,8 @@ struct Collection {
 
 struct Pipeline {
   const Id id;
+  const Id program;
+
   uint8_t priority;
 
   Select select;
@@ -63,6 +62,7 @@ struct Pipeline {
 };
 
 struct Program {
+  const Id id;
   void* self;
 };
 

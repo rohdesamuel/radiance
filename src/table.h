@@ -18,6 +18,7 @@
 #include <boost/lockfree/queue.hpp>
 #include <boost/container/vector.hpp>
 
+#include "radiance.h"
 #include "common.h"
 #include "system.h"
 
@@ -29,13 +30,6 @@ enum class IndexedBy {
   OFFSET,
   HANDLE,
   KEY
-};
-
-enum class MutateBy {
-  UNKNOWN = 0,
-  INSERT,
-  REMOVE,
-  WRITE
 };
 
 template<typename Key_, typename Value_>
@@ -431,7 +425,7 @@ public:
           case MutateBy::REMOVE:
             table->remove(table->find(m.el.key));
             break;
-          case MutateBy::WRITE:
+          case MutateBy::UPDATE:
             switch (m.el.indexed_by) {
               case IndexedBy::HANDLE:
                 (*table)[m.el.handle] = std::move(m.el.value);
