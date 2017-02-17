@@ -2,6 +2,7 @@
 #include "src/table.h"
 #include "src/stack_memory.h"
 #include "src/schema.h"
+#include "src/timer.h"
 
 #include <glm/glm.hpp>
 
@@ -128,12 +129,24 @@ int main() {
   radiance::Universe uni;
   radiance::init(&uni);
 
-  std::cout << "Program id: " << radiance::create_program("physics") << std::endl; 
+  radiance::create_program("physics"); 
   radiance::Collection* transformations =
       radiance::add_collection("physics", "transformations");
 
+  uint64_t count = 1000000;
+  uint64_t iterations = 10;
+
   Transformations::Table* table = new Transformations::Table();
-  radiance::Copy copy = [](const uint8_t* key, const uint8_t* value, radiance::Stack* stack) {
+  table->keys.reserve(count);
+  table->values.reserve(count);
+
+  for (uint64_t i = 0; i < count; ++i) {
+    glm::vec3 p{(float)i, 0, 0};
+    glm::vec3 v{1, 0, 0};
+    table->insert(i, {p, v});
+  }
+
+  radiance::Copy copy = [](const uint8_t* key, const uint8_t* value, uint64_t, radiance::Stack* stack) {
     radiance::Mutation* mutation = (radiance::Mutation*)stack->alloc(sizeof(radiance::Mutation) + sizeof(Transformations::Element));
     mutation->element = (uint8_t*)(mutation + sizeof(radiance::Mutation));
     mutation->mutate_by = radiance::MutateBy::UPDATE;
@@ -144,12 +157,17 @@ int main() {
   radiance::Mutate mutate = [](radiance::Collection* c, const radiance::Mutation* m) {
     Transformations::Table* t = (Transformations::Table*)c->self;
     Transformations::Element* el = (Transformations::Element*)(m->element);
-    (*t)[t->find(el->key)] = el->value;
+    (*t)[t->find(el->key)] = std::move(el->value);
+    //std::cout << el->value.p.x << ", " << std::endl;
   };
 
   transformations->self = (uint8_t*)table;
   transformations->copy = copy;
   transformations->mutate = mutate;
+  transformations->count = [](radiance::Collection* c) -> uint64_t {
+    return ((Transformations::Table*)c->self)->size();
+  };
+
   transformations->keys.data = (uint8_t*)table->keys.data();
   transformations->keys.size = sizeof(Transformations::Key);
   transformations->keys.offset = 0;
@@ -159,7 +177,6 @@ int main() {
 
   radiance::Pipeline* pipeline =
       radiance::add_pipeline("physics", "transformations", "transformations");
-  std::cout << "Created pipeline: " << pipeline << std::endl;
   pipeline->select = nullptr;
   pipeline->transform = [](radiance::Stack* s) {
     Transformations::Element* el = (Transformations::Element*)((radiance::Mutation*)(s->top()))->element;
@@ -177,7 +194,16 @@ int main() {
   render_pipeline->transform = [](radiance::Stack*){};
 
   radiance::start();
-  radiance::loop();
+  Timer timer;
+  for (uint64_t i = 0; i < iterations; ++i) {
+    timer.start();
+    radiance::loop();
+    timer.stop();
+  }
+  std::cout << "elapsed ns: " << timer.get_elapsed_ns() << std::endl;
+  std::cout << "avg ns per iteration: " << timer.get_elapsed_ns() / iterations << std::endl;
+  std::cout << "avg ns per entity per iteration: " << timer.get_elapsed_ns() / iterations / count << std::endl;
+  std::cout << "throughput: " << count / ((timer.get_elapsed_ns() / 1e9) / iterations) << std::endl;
   radiance::stop();
 
   /*

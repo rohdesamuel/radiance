@@ -39,6 +39,8 @@ Status::Code PrivateUniverse::start() {
 }
 
 Status::Code PrivateUniverse::loop() {
+  ProgramImpl* p = (ProgramImpl*)programs_.get_program("physics")->self;
+  p->run();
 
   return transition({RunState::RUNNING, RunState::STARTED}, RunState::RUNNING);
 }
@@ -68,7 +70,6 @@ Collection* PrivateUniverse::add_collection(const char* program, const char* nam
 }
 
 Status::Code PrivateUniverse::add_source(Pipeline* pipeline, const char* source) {
-  std::cout << "getting program\n";
   Program* p = programs_.get_program(pipeline->program);
   if (!p) {
     return Status::NULL_POINTER;

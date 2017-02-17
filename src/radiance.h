@@ -37,7 +37,7 @@ typedef bool (*Select)(uint8_t, ...);
 typedef void (*Transform)(struct Stack*);
 
 typedef void (*Mutate)(struct Collection*, const Mutation*);
-typedef void (*Copy)(const uint8_t* value, const uint8_t* key, struct Stack*);
+typedef void (*Copy)(const uint8_t* key, const uint8_t* value, uint64_t index, struct Stack*);
 
 // Put the next element onto the stack. Gives nullptr as state to begin. Return
 // nullptr if at end.
@@ -65,6 +65,7 @@ struct Collection {
 struct Pipeline {
   const Id id;
   const Id program;
+  void* self;
 
   uint8_t priority;
 

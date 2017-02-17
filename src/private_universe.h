@@ -12,177 +12,11 @@
 #include <vector>
 #include <limits>
 
+#define LOG_VAR(var) std::cout << #var << " = " << var << std::endl
+
 namespace radiance {
 
 const static char NAMESPACE_DELIMETER = '/';
-
-class ProgramImpl {
- private:
-   typedef Table<Collection*, std::set<Pipeline*>> Mutators;
- public:
-  ProgramImpl(Program* program) : program_(program) {}
-
-  Pipeline* add_pipeline(Collection* source, Collection* sink) {
-    Pipeline* pipeline = new_pipeline(pipelines_.size());
-    pipelines_.push_back(pipeline);
-
-    add_source(pipeline, source);
-    add_sink(pipeline, sink);
-
-    return pipeline;
-  }
-
-  Status::Code add_source(Pipeline* pipeline, Collection* source) {
-    return add_pipeline_to_collection(pipeline, source, &readers_);
-  }
-
-  Status::Code add_sink(Pipeline* pipeline, Collection* sink) {
-    return add_pipeline_to_collection(pipeline, sink, &writers_);
-  }
-
-  bool contains_pipeline(Pipeline* pipeline) {
-    return std::find(pipelines_.begin(), pipelines_.end(), pipeline) != pipelines_.end();
-  }
-
- private:
-  Pipeline* new_pipeline(Id id) {
-    Pipeline* p = (Pipeline*)malloc(sizeof(Pipeline));
-    memset(p, 0, sizeof(Pipeline));
-    *(Id*)(&p->program) = program_->id;
-    *(Id*)(&p->id) = id;
-    return p;
-  }
-
-  Status::Code add_pipeline_to_collection(
-      Pipeline* pipeline, Collection* collection, Mutators* table) {
-    if (!pipeline || !collection || !table) {
-      return Status::NULL_POINTER;
-    }
-
-    if (!contains_pipeline(pipeline)) {
-      return Status::DOES_NOT_EXIST;
-    }
-
-    Handle handle = table->find(collection);
-    if (handle == -1) {
-      handle = table->insert(collection, {});
-    }
-
-    std::set<Pipeline*>& pipelines = (*table)[handle];
-
-    if (pipelines.find(pipeline) == pipelines.end()) {
-      pipelines.insert(pipeline);
-    } else {
-      return Status::ALREADY_EXISTS;
-    }
-
-    return Status::OK;
-  }
-
-  Program* program_;
-  Mutators writers_;
-  Mutators readers_;
-  std::vector<Pipeline*> pipelines_;
-};
-
-class CollectionRegistry {
- public:
-  Collection* add(const char* program, const char* collection) {
-    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
-    Collection* ret = nullptr;
-    if (collections_.find(name) == -1) {
-      Handle id = collections_.insert(name, nullptr);
-      ret = new_collection(id);
-      collections_[id] = ret;
-    }
-    return ret;
-  }
-
-  Status::Code share(const char* source, const char* dest) {
-    Handle src = collections_.find(source);
-    Handle dst = collections_.find(dest);
-    if (src != -1 && dst == -1) {
-      dst = collections_.insert(dest, collections_[src]);
-      return Status::OK;
-    }
-    return Status::ALREADY_EXISTS;
-  }
-
-  Collection* get(const char* name) {
-    Collection* ret = nullptr;
-    Handle id;
-    if ((id = collections_.find(name)) != -1) {
-      ret = collections_[id];
-    }
-    return ret;
-  }
-
-  Collection* get(const char* program, const char* collection) {
-    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
-    return get(name.data());
-  }
-
- private:
-  Collection* new_collection(Id id) {
-    Collection* c = (Collection*)malloc(sizeof(Collection));
-    memset(c, 0, sizeof(Collection));
-    *(Id*)(&c->id) = id;
-    return c;
-  }
-
-  Table<std::string, Collection*> collections_;
-};
-
-class ProgramRegistry {
- public:
-  Id create_program(const char* program) {
-    Id id = programs_.find(program);
-    if (id == -1) {
-      id = programs_.insert(program, nullptr);
-      Program* p = new_program(id);
-      p->self = new ProgramImpl{p};
-      programs_[id] = p;
-    }
-    return id;
-  }
-
-  Status::Code add_source(Pipeline* pipeline, Collection* collection) {
-    std::cout << "adding source\n";
-    Program* p = programs_[pipeline->program];
-    return to_impl(p)->add_source(pipeline, collection);
-  }
-
-  Status::Code add_sink(Pipeline* pipeline, Collection* collection) {
-    Program* p = programs_[pipeline->program];
-    return to_impl(p)->add_sink(pipeline, collection);
-  }
-
-  Program* get_program(const char* program) {
-    Handle id = programs_.find(program);
-    if (id == -1) {
-      std::cout << "here :(\n";
-      return nullptr;
-    }
-    return programs_[id];
-  }
-
-  Program* get_program(Id id) {
-    return programs_[id];
-  }
-
-  inline ProgramImpl* to_impl(Program* p) {
-    return (ProgramImpl*)(p->self);
-  }
- private:
-  Program* new_program(Id id) {
-    Program* p = (Program*)malloc(sizeof(Program));
-    memset(p, 0, sizeof(Program));
-    *(Id*)(&p->id) = id;
-    return p;
-  }
-
-  Table<std::string, Program*> programs_;
-};
 
 class PipelineImpl {
  private:
@@ -191,10 +25,27 @@ class PipelineImpl {
   std::vector<Collection*> sinks_;
 
  public:
-  PipelineImpl(Pipeline* pipeline);
+  PipelineImpl(Pipeline* pipeline) : pipeline_(pipeline) {}
   
-  void add_source(Collection* source);
-  void add_sink(Collection* sink);
+  void add_source(Collection* source) {
+    if (source) {
+      if (std::find(sources_.begin(), sources_.end(), source) == sources_.end()) {
+        sources_.push_back(source);
+      }
+    }
+  }
+
+  void add_sink(Collection* sink) {
+    if (sink) {
+      if (std::find(sinks_.begin(), sinks_.end(), sink) == sinks_.end()) {
+        sinks_.push_back(sink);
+      }
+    }
+  }
+
+  void run() {
+    run_1_to_1();
+  }
 
   void run_1_to_1() {
     Stack stack;
@@ -207,7 +58,7 @@ class PipelineImpl {
     uint64_t count = source->count(source);
 
     for(uint64_t i = 0; i < count; ++i) {
-      source->copy(keys, values, &stack);
+      source->copy(keys, values, i, &stack);
       if (pipeline_->select) {
         if (pipeline_->select(1, &stack)) {
           pipeline_->transform(&stack);
@@ -277,6 +128,181 @@ class PipelineImpl {
       }
     }
   }
+};
+
+class ProgramImpl {
+ private:
+   typedef Table<Collection*, std::set<Pipeline*>> Mutators;
+ public:
+  ProgramImpl(Program* program) : program_(program) {}
+
+  Pipeline* add_pipeline(Collection* source, Collection* sink) {
+    Pipeline* pipeline = new_pipeline(pipelines_.size());
+    pipelines_.push_back(pipeline);
+
+    add_source(pipeline, source);
+    add_sink(pipeline, sink);
+
+    return pipeline;
+  }
+
+  Status::Code add_source(Pipeline* pipeline, Collection* source) {
+    ((PipelineImpl*)(pipeline->self))->add_source(source);
+    return add_pipeline_to_collection(pipeline, source, &readers_);
+  }
+
+  Status::Code add_sink(Pipeline* pipeline, Collection* sink) {
+    ((PipelineImpl*)(pipeline->self))->add_sink(sink);
+    return add_pipeline_to_collection(pipeline, sink, &writers_);
+  }
+
+  bool contains_pipeline(Pipeline* pipeline) {
+    return std::find(pipelines_.begin(), pipelines_.end(), pipeline) != pipelines_.end();
+  }
+
+  void run() {
+    for(Pipeline* p : pipelines_) {
+      ((PipelineImpl*)p->self)->run();
+    }
+  }
+
+ private:
+  Pipeline* new_pipeline(Id id) {
+    Pipeline* p = (Pipeline*)malloc(sizeof(Pipeline));
+    memset(p, 0, sizeof(Pipeline));
+    *(Id*)(&p->program) = program_->id;
+    *(Id*)(&p->id) = id;
+    p->self = new PipelineImpl(p);
+    return p;
+  }
+
+  Status::Code add_pipeline_to_collection(
+      Pipeline* pipeline, Collection* collection, Mutators* table) {
+    if (!pipeline || !collection || !table) {
+      return Status::NULL_POINTER;
+    }
+
+    if (!contains_pipeline(pipeline)) {
+      return Status::DOES_NOT_EXIST;
+    }
+
+    Handle handle = table->find(collection);
+    if (handle == -1) {
+      handle = table->insert(collection, {});
+    }
+
+    std::set<Pipeline*>& pipelines = (*table)[handle];
+
+    if (pipelines.find(pipeline) == pipelines.end()) {
+      pipelines.insert(pipeline);
+    } else {
+      return Status::ALREADY_EXISTS;
+    }
+
+    return Status::OK;
+  }
+
+  Program* program_;
+  Mutators writers_;
+  Mutators readers_;
+  std::vector<Pipeline*> pipelines_;
+};
+
+class CollectionRegistry {
+ public:
+  Collection* add(const char* program, const char* collection) {
+    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
+    Collection* ret = nullptr;
+    if (collections_.find(name) == -1) {
+      Handle id = collections_.insert(name, nullptr);
+      ret = new_collection(id);
+      collections_[id] = ret;
+    }
+    return ret;
+  }
+
+  Status::Code share(const char* source, const char* dest) {
+    Handle src = collections_.find(source);
+    Handle dst = collections_.find(dest);
+    if (src != -1 && dst == -1) {
+      collections_.insert(dest, collections_[src]);
+      return Status::OK;
+    }
+    return Status::ALREADY_EXISTS;
+  }
+
+  Collection* get(const char* name) {
+    Collection* ret = nullptr;
+    Handle id;
+    if ((id = collections_.find(name)) != -1) {
+      ret = collections_[id];
+    }
+    return ret;
+  }
+
+  Collection* get(const char* program, const char* collection) {
+    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
+    return get(name.data());
+  }
+
+ private:
+  Collection* new_collection(Id id) {
+    Collection* c = (Collection*)malloc(sizeof(Collection));
+    memset(c, 0, sizeof(Collection));
+    *(Id*)(&c->id) = id;
+    return c;
+  }
+
+  Table<std::string, Collection*> collections_;
+};
+
+class ProgramRegistry {
+ public:
+  Id create_program(const char* program) {
+    Id id = programs_.find(program);
+    if (id == -1) {
+      id = programs_.insert(program, nullptr);
+      Program* p = new_program(id);
+      p->self = new ProgramImpl{p};
+      programs_[id] = p;
+    }
+    return id;
+  }
+
+  Status::Code add_source(Pipeline* pipeline, Collection* collection) {
+    Program* p = programs_[pipeline->program];
+    return to_impl(p)->add_source(pipeline, collection);
+  }
+
+  Status::Code add_sink(Pipeline* pipeline, Collection* collection) {
+    Program* p = programs_[pipeline->program];
+    return to_impl(p)->add_sink(pipeline, collection);
+  }
+
+  Program* get_program(const char* program) {
+    Handle id = programs_.find(program);
+    if (id == -1) {
+      return nullptr;
+    }
+    return programs_[id];
+  }
+
+  Program* get_program(Id id) {
+    return programs_[id];
+  }
+
+  inline ProgramImpl* to_impl(Program* p) {
+    return (ProgramImpl*)(p->self);
+  }
+ private:
+  Program* new_program(Id id) {
+    Program* p = (Program*)malloc(sizeof(Program));
+    memset(p, 0, sizeof(Program));
+    *(Id*)(&p->id) = id;
+    return p;
+  }
+
+  Table<std::string, Program*> programs_;
 };
 
 class PrivateUniverse {
