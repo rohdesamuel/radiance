@@ -24,31 +24,42 @@ enum class MutateBy {
   UNKNOWN = 0,
   INSERT,
   UPDATE,
-  REMOVE
+  REMOVE,
+  INSERT_OR_UPDATE,
 };
 
 struct Mutation {
-  Element* element;
   MutateBy mutate_by;
+  uint8_t* element;
 };
 
 typedef bool (*Select)(uint8_t, ...);
 typedef void (*Transform)(struct Stack*);
 
 typedef void (*Mutate)(struct Collection*, const Mutation*);
+typedef void (*Copy)(const uint8_t* value, const uint8_t* key, struct Stack*);
 
 // Put the next element onto the stack. Gives nullptr as state to begin. Return
 // nullptr if at end.
 typedef uint8_t* (*Iterate)(struct Collection*, struct Stack*, uint8_t* state);
 
+struct Iterator {
+  uint8_t* data;
+  uint32_t offset;
+  size_t size;
+};
+
 struct Collection {
   const Id id;
   uint8_t* self;
 
-  size_t state_size;
+  Iterator keys;
+  Iterator values;
+  
+  uint64_t (*count)(Collection*);
 
+  Copy copy;
   Mutate mutate;
-  Iterate iterate;
 };
 
 struct Pipeline {

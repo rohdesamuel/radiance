@@ -1,7 +1,7 @@
 #include "radiance.h"
 #include "private_universe.h"
 
-#define AS_PRIVATE(expr) ((PrivateUniverse*)(universe_))->expr
+#define AS_PRIVATE(expr) ((PrivateUniverse*)(universe_->self))->expr
 
 namespace radiance {
 
@@ -14,6 +14,8 @@ Universe* universe() {
 
 Status::Code init(Universe* u) {
   universe_ = u;
+  universe_->self = new PrivateUniverse();
+
   return AS_PRIVATE(init());
 }
 
@@ -22,8 +24,9 @@ Status::Code start() {
 }
 
 Status::Code stop() {
+  Status::Code ret = AS_PRIVATE(stop());
   universe_ = nullptr;
-  return AS_PRIVATE(stop());
+  return ret;
 }
 
 Status::Code loop() {

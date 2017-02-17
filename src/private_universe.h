@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <set>
 #include <vector>
+#include <limits>
 
 namespace radiance {
 
@@ -47,8 +48,8 @@ class ProgramImpl {
   Pipeline* new_pipeline(Id id) {
     Pipeline* p = (Pipeline*)malloc(sizeof(Pipeline));
     memset(p, 0, sizeof(Pipeline));
-    *(Id*)(p->program) = program_->id;
-    *(Id*)(p->id) = id;
+    *(Id*)(&p->program) = program_->id;
+    *(Id*)(&p->id) = id;
     return p;
   }
 
@@ -97,6 +98,16 @@ class CollectionRegistry {
     return ret;
   }
 
+  Status::Code share(const char* source, const char* dest) {
+    Handle src = collections_.find(source);
+    Handle dst = collections_.find(dest);
+    if (src != -1 && dst == -1) {
+      dst = collections_.insert(dest, collections_[src]);
+      return Status::OK;
+    }
+    return Status::ALREADY_EXISTS;
+  }
+
   Collection* get(const char* name) {
     Collection* ret = nullptr;
     Handle id;
@@ -115,7 +126,7 @@ class CollectionRegistry {
   Collection* new_collection(Id id) {
     Collection* c = (Collection*)malloc(sizeof(Collection));
     memset(c, 0, sizeof(Collection));
-    *(Id*)(c->id) = id;
+    *(Id*)(&c->id) = id;
     return c;
   }
 
@@ -125,10 +136,9 @@ class CollectionRegistry {
 class ProgramRegistry {
  public:
   Id create_program(const char* program) {
-    std::string name{program};
-    Id id = programs_.find(name);
-    if (id != -1) {
-      id = programs_.insert(name, nullptr);
+    Id id = programs_.find(program);
+    if (id == -1) {
+      id = programs_.insert(program, nullptr);
       Program* p = new_program(id);
       p->self = new ProgramImpl{p};
       programs_[id] = p;
@@ -137,6 +147,7 @@ class ProgramRegistry {
   }
 
   Status::Code add_source(Pipeline* pipeline, Collection* collection) {
+    std::cout << "adding source\n";
     Program* p = programs_[pipeline->program];
     return to_impl(p)->add_source(pipeline, collection);
   }
@@ -147,8 +158,9 @@ class ProgramRegistry {
   }
 
   Program* get_program(const char* program) {
-    Handle id = programs_.find({program});
+    Handle id = programs_.find(program);
     if (id == -1) {
+      std::cout << "here :(\n";
       return nullptr;
     }
     return programs_[id];
@@ -165,7 +177,7 @@ class ProgramRegistry {
   Program* new_program(Id id) {
     Program* p = (Program*)malloc(sizeof(Program));
     memset(p, 0, sizeof(Program));
-    *(Id*)(p->id) = id;
+    *(Id*)(&p->id) = id;
     return p;
   }
 
@@ -186,13 +198,16 @@ class PipelineImpl {
 
   void run_1_to_1() {
     Stack stack;
-    Stack state_stack;
     
     Collection* source = sources_[0];
     Collection* sink = sinks_[0];
 
-    uint8_t* state = source->iterate(source, &stack, nullptr);
-    while(state) {
+    uint8_t* keys = source->keys.data + source->keys.offset;
+    uint8_t* values = source->values.data + source->values.offset;
+    uint64_t count = source->count(source);
+
+    for(uint64_t i = 0; i < count; ++i) {
+      source->copy(keys, values, &stack);
       if (pipeline_->select) {
         if (pipeline_->select(1, &stack)) {
           pipeline_->transform(&stack);
@@ -203,48 +218,62 @@ class PipelineImpl {
         sink->mutate(sink, (const Mutation*)stack.top());
       }
       stack.clear();
-      state = source->iterate(source, &stack, state);
+
+      keys += source->keys.size;
+      values += source->values.size;
     }
   }
 
   void run_m_to_n() {
     Stack stack;
-    std::vector<uint8_t*> states;
-    bool should_continue = true;
+    std::unordered_map<uint8_t*, std::vector<uint8_t*>> joined;
+
+    uint64_t min_count = std::numeric_limits<uint64_t>::max();
+    Collection* min_collection = nullptr;
     for (Collection* c : sources_) {
-      uint8_t* state = c->iterate(c, &stack, nullptr);
-      states.push_back(state);
-      should_continue &= state == nullptr;
+      if (c->count(c) < min_count) {
+        min_collection = c;
+      }
     }
 
-    if (pipeline_->select) {
-      uint8_t count = (uint8_t)sources_.size();
-      while(should_continue) {
-        if (pipeline_->select(count, &stack)) {
-          pipeline_->transform(&stack);
-          for(Collection* c : sinks_) {
-            c->mutate(c, (const Mutation*)stack.top());
-          }
-        }
-        stack.clear();
-        for (Collection* c : sources_) {
-          uint8_t* state = c->iterate(c, &stack, nullptr);
-          states.push_back(state);
-          should_continue &= state == nullptr;
-        }
+    {
+      uint8_t* keys = min_collection->keys.data + min_collection->keys.offset;
+      uint8_t* values = min_collection->values.data + min_collection->values.offset;
+      for(uint64_t i = 0; i < min_count; ++i) {
+        joined[keys].push_back(values);
+
+        keys += min_collection->keys.size;
+        values += min_collection->values.size;
       }
-    } else {
-      while(should_continue) {
-        pipeline_->transform(&stack);
-        for(Collection* c : sinks_) {
-          c->mutate(c, (const Mutation*)stack.top());
+    }
+
+    for (Collection* c : sources_) {
+      if (c == min_collection) continue;
+      if (c == sources_.back()) continue;
+
+      uint8_t* keys = min_collection->keys.data + min_collection->keys.offset;
+      uint8_t* values = min_collection->values.data + min_collection->values.offset;
+      for(uint64_t i = 0; i < min_count; ++i) {
+        joined[keys].push_back(values);
+
+        keys += c->keys.size;
+        values += c->values.size;
+      }
+    }
+
+    {
+      Collection* c = sources_.back();
+      uint8_t* keys = c->keys.data + c->keys.offset;
+      uint8_t* values = c->values.data + c->values.offset;
+      for(uint64_t i = 0; i < min_count; ++i) {
+        auto joined_values = joined[keys];
+        joined_values.push_back(values);
+
+        if (joined_values.size() == sources_.size()) {
         }
-        stack.clear();
-        for (Collection* c : sources_) {
-          uint8_t* state = c->iterate(c, &stack, nullptr);
-          states.push_back(state);
-          should_continue &= state == nullptr;
-        }
+
+        keys += c->keys.size;
+        values += c->values.size;
       }
     }
   }
@@ -285,7 +314,6 @@ class PrivateUniverse {
 
   CollectionRegistry collections_;
   ProgramRegistry programs_;
-  std::unordered_map<Program*, std::vector<Pipeline>> pipelines_;
 
   RunState run_state_;
 };

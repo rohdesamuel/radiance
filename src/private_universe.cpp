@@ -57,10 +57,10 @@ Pipeline* PrivateUniverse::add_pipeline(const char* program, const char* source,
     return nullptr;
   }
 
-  Collection* src = collections_.get(form_path(program, source).data());
-  Collection* snk = collections_.get(form_path(program, sink).data());
+  Collection* src = source ? collections_.get(form_path(program, source).data()) : nullptr;
+  Collection* snk = sink ? collections_.get(form_path(program, sink).data()) : nullptr;
 
-  return programs_.to_impl(p)->add_pipeline(src, snk);;
+  return programs_.to_impl(p)->add_pipeline(src, snk);
 }
 
 Collection* PrivateUniverse::add_collection(const char* program, const char* name) {
@@ -68,6 +68,7 @@ Collection* PrivateUniverse::add_collection(const char* program, const char* nam
 }
 
 Status::Code PrivateUniverse::add_source(Pipeline* pipeline, const char* source) {
+  std::cout << "getting program\n";
   Program* p = programs_.get_program(pipeline->program);
   if (!p) {
     return Status::NULL_POINTER;
@@ -87,8 +88,8 @@ Status::Code PrivateUniverse::add_sink(Pipeline* pipeline, const char* sink) {
   return programs_.to_impl(p)->add_source(pipeline, snk);
 }
 
-Status::Code PrivateUniverse::share_collection(const char*, const char*) {
-  return Status::OK;
+Status::Code PrivateUniverse::share_collection(const char* source, const char* dest) {
+  return collections_.share(source, dest);
 }
 
 Status::Code PrivateUniverse::copy_collection(const char*, const char*) {

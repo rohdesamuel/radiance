@@ -1,5 +1,6 @@
 #include "src/radiance.h"
 #include "src/table.h"
+#include "src/stack_memory.h"
 #include "src/schema.h"
 
 #include <glm/glm.hpp>
@@ -127,42 +128,43 @@ int main() {
   radiance::Universe uni;
   radiance::init(&uni);
 
-  radiance::create_program("physics");
+  std::cout << "Program id: " << radiance::create_program("physics") << std::endl; 
   radiance::Collection* transformations =
       radiance::add_collection("physics", "transformations");
 
   Transformations::Table* table = new Transformations::Table();
+  radiance::Copy copy = [](const uint8_t* key, const uint8_t* value, radiance::Stack* stack) {
+    radiance::Mutation* mutation = (radiance::Mutation*)stack->alloc(sizeof(radiance::Mutation) + sizeof(Transformations::Element));
+    mutation->element = (uint8_t*)(mutation + sizeof(radiance::Mutation));
+    mutation->mutate_by = radiance::MutateBy::UPDATE;
+    Transformations::Element* el = (Transformations::Element*)(mutation->element);
+    new (&el->key) Transformations::Key( *(Transformations::Key*)(key) );
+    new (&el->value) Transformations::Value( *(Transformations::Value*)(value) );
+  };
   radiance::Mutate mutate = [](radiance::Collection* c, const radiance::Mutation* m) {
     Transformations::Table* t = (Transformations::Table*)c->self;
     Transformations::Element* el = (Transformations::Element*)(m->element);
-    t->insert(el->key, el->value);
-  };
-  radiance::Iterate iterate = [](radiance::Collection* c, radiance::Stack* s, uint8_t* state) -> uint8_t* {
-    thread_local static uint64_t index = 0;
-    uint64_t* ret = &index;
-    Transformations::Table* t = (Transformations::Table*)c->self;
-
-    if (state == nullptr) {
-      index = 0;
-    } else {
-      ++index;
-      if (index >= t->size()) {
-        return (uint8_t*)nullptr;
-      }
-    }
-    std::tuple<Transformations::Key, Transformations::Value> el{t->key(index), t->value(index)};
-    *((std::tuple<Transformations::Key, Transformations::Value>*)(s->alloc(sizeof(el)))) = el;
-
-    return (uint8_t*)ret;
+    (*t)[t->find(el->key)] = el->value;
   };
 
   transformations->self = (uint8_t*)table;
+  transformations->copy = copy;
   transformations->mutate = mutate;
-  transformations->iterate = iterate;
+  transformations->keys.data = (uint8_t*)table->keys.data();
+  transformations->keys.size = sizeof(Transformations::Key);
+  transformations->keys.offset = 0;
+  transformations->values.data = (uint8_t*)table->values.data();
+  transformations->values.size = sizeof(Transformations::Value);
+  transformations->values.offset = 0;
 
   radiance::Pipeline* pipeline =
       radiance::add_pipeline("physics", "transformations", "transformations");
+  std::cout << "Created pipeline: " << pipeline << std::endl;
   pipeline->select = nullptr;
+  pipeline->transform = [](radiance::Stack* s) {
+    Transformations::Element* el = (Transformations::Element*)((radiance::Mutation*)(s->top()))->element;
+    el->value.p += el->value.v;
+  };
 
   radiance::create_program("render");
   radiance::add_collection("render", "meshes");
