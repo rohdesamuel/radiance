@@ -4,6 +4,10 @@
 
 double NS_TO_SEC = 1e9;
 
+#ifdef __COMPILE_AS_LINUX__
+#define CLOCK_TYPE CLOCK_MONOTONIC //CLOCK_PROCESS_CPUTIME_ID
+#endif  // ifdef __COMPILE_AS_LINUX__
+
 Timer::Timer() {
   reset();
 #ifdef __COMPILE_AS_WINDOWS__
@@ -16,7 +20,7 @@ void Timer::start() {
   get_clock_frequency();
   QueryPerformanceCounter(&start_);
 #elif defined (__COMPILE_AS_LINUX__)
-  clock_gettime(CLOCK_MONOTONIC, &start_);
+  clock_gettime(CLOCK_TYPE, &start_);
 #endif
 }
 
@@ -24,7 +28,7 @@ void Timer::stop() {
 #ifdef __COMPILE_AS_WINDOWS__
   QueryPerformanceCounter(&end_);
 #elif defined (__COMPILE_AS_LINUX__)
-  clock_gettime(CLOCK_MONOTONIC, &end_);
+  clock_gettime(CLOCK_TYPE, &end_);
 #endif
 }
 

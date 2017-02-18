@@ -5,118 +5,10 @@
 #include "src/timer.h"
 
 #include <glm/glm.hpp>
-
+#include <omp.h>
 #include <unordered_map>
 
 typedef std::vector<glm::vec3> Vectors;
-
-namespace radiance {
-
-#if 0
-template <class... Sources_>
-class Entity {
- public:
-  class Reader {
-   public:
-    void operator()(Entity* entity, const SystemExecutor& system) const {
-      read(entity, system, std::index_sequence_for<Sources_*...>());
-    }
-
-   private:
-    template<class Source_>
-    void read(Source_* source, Handle handle, Frame* frame) const {
-      frame->push((*source)[handle]);
-    }
-
-    template<std::size_t... Index_>
-    void read(Entity* entity, const SystemExecutor& system,
-        std::index_sequence<Index_...>) const {
-      for(const auto& component_source : entity->components.values) {
-        static thread_local Frame frame;
-        using swallow = int[];
-        (void)swallow{0, (void(
-              read(std::get<Index_>(entity->sources_), component_source[Index_], &frame))
-        , 0)...};
-        system(&frame);
-        frame.clear();
-      }
-    };
-  };
-
-  Entity(Sources_*... sources) {
-    sources_ = std::tuple<Sources_*...>{sources...};
-  }
-
-  Table<uint64_t, std::vector<Handle>> components;
-
- private:
-  std::tuple<Sources_*...> sources_;
-};
-
-template<class... Types_>
-class Join {
- public:
-  class Reader {
-   public:
-    void operator()(Join* join, const SystemExecutor& system) const {
-      read(join, system, std::index_sequence_for<Types_...>());
-    }
-
-   private:
-    template<class Type_>
-    void read(Type_* type, Handle handle, Frame* frame) const {
-      typename Type_::Typedef* source = (*universe()->source_manager)[*type];
-      frame->push((*source)[handle]);
-    }
-
-    template<std::size_t... Index_>
-    void read(Join* join, const SystemExecutor& system,
-        std::index_sequence<Index_...>) const {
-      for(const auto& component_source : join->components.values) {
-        static thread_local Frame frame;
-        using swallow = int[];
-        (void)swallow{0, (void(
-              read(std::get<Index_>(join->types_), component_source[Index_], &frame))
-        , 0)...};
-        system(&frame);
-        frame.clear();
-      }
-    };
-  };
-
-  Join(Types_... types) {
-    types_ = std::tuple<Types_...>{types...};
-  }
-
-  Table<uint64_t, std::vector<Handle>> components;
-
- private:
-  std::tuple<Types_...> types_;
-};
-
-template <class Source_>
-class Iterator {
- public:
-  struct Options {
-  };
-
-  Iterator(Options options): options_(options) {}
-
-  void operator()(Source_* source, SystemExecutor& system) const {
-    for (int64_t i = 0; i < (int64_t)source->size(); ++i) {
-      thread_local static Frame frame;
-      frame.clear();
-      frame.peek(reader(source, i));
-      system(&frame);
-    }
-  }
-
- private:
-  Options options_;
-};
-#endif
-
-}  // namespace radiance
 
 struct Transformation {
   glm::vec3 p;
@@ -126,15 +18,20 @@ struct Transformation {
 typedef radiance::Schema<uint32_t, Transformation> Transformations;
 
 int main() {
+
+  uint64_t count = 4096;
+  uint64_t iterations = 1000;
+  std::cout << "Max parallelization: " << omp_get_max_threads() << std::endl;
+  std::cout << "Number of threads: " << omp_get_num_threads() << std::endl;
+  std::cout << "Number of iterations: " << iterations << std::endl;
+  std::cout << "Entity count: " << count << std::endl;
+
   radiance::Universe uni;
   radiance::init(&uni);
 
   radiance::create_program("physics"); 
   radiance::Collection* transformations =
       radiance::add_collection("physics", "transformations");
-
-  uint64_t count = 1000000;
-  uint64_t iterations = 10;
 
   Transformations::Table* table = new Transformations::Table();
   table->keys.reserve(count);
@@ -146,19 +43,18 @@ int main() {
     table->insert(i, {p, v});
   }
 
-  radiance::Copy copy = [](const uint8_t* key, const uint8_t* value, uint64_t, radiance::Stack* stack) {
+  radiance::Copy copy = [](const uint8_t*, const uint8_t* value, uint64_t offset, radiance::Stack* stack) {
     radiance::Mutation* mutation = (radiance::Mutation*)stack->alloc(sizeof(radiance::Mutation) + sizeof(Transformations::Element));
     mutation->element = (uint8_t*)(mutation + sizeof(radiance::Mutation));
     mutation->mutate_by = radiance::MutateBy::UPDATE;
     Transformations::Element* el = (Transformations::Element*)(mutation->element);
-    new (&el->key) Transformations::Key( *(Transformations::Key*)(key) );
+    el->offset = offset;
     new (&el->value) Transformations::Value( *(Transformations::Value*)(value) );
   };
   radiance::Mutate mutate = [](radiance::Collection* c, const radiance::Mutation* m) {
     Transformations::Table* t = (Transformations::Table*)c->self;
     Transformations::Element* el = (Transformations::Element*)(m->element);
-    (*t)[t->find(el->key)] = std::move(el->value);
-    //std::cout << el->value.p.x << ", " << std::endl;
+    t->values[el->offset] = std::move(el->value); 
   };
 
   transformations->self = (uint8_t*)table;
@@ -194,16 +90,21 @@ int main() {
   render_pipeline->transform = [](radiance::Stack*){};
 
   radiance::start();
+  double total = 0.0;
+  double avg = 0.0;
   Timer timer;
   for (uint64_t i = 0; i < iterations; ++i) {
     timer.start();
     radiance::loop();
     timer.stop();
+    total += timer.get_elapsed_ns();
   }
-  std::cout << "elapsed ns: " << timer.get_elapsed_ns() << std::endl;
-  std::cout << "avg ns per iteration: " << timer.get_elapsed_ns() / iterations << std::endl;
-  std::cout << "avg ns per entity per iteration: " << timer.get_elapsed_ns() / iterations / count << std::endl;
-  std::cout << "throughput: " << count / ((timer.get_elapsed_ns() / 1e9) / iterations) << std::endl;
+  avg = total / iterations;
+  std::cout << "elapsed ns: " << total << std::endl;
+  std::cout << "avg ns per iteration: " << avg << std::endl;
+  std::cout << "avg ns per entity per iteration: " << avg / count << std::endl;
+  std::cout << "iteration throughput: " << (1e9 / avg) << std::endl;
+  std::cout << "entity throughput: " << count / (avg / 1e9) << std::endl;
   radiance::stop();
 
   /*

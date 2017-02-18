@@ -48,30 +48,27 @@ class PipelineImpl {
   }
 
   void run_1_to_1() {
-    Stack stack;
     
     Collection* source = sources_[0];
     Collection* sink = sinks_[0];
 
-    uint8_t* keys = source->keys.data + source->keys.offset;
-    uint8_t* values = source->values.data + source->values.offset;
+    //uint8_t* keys = source->keys.data + source->keys.offset;
+    //uint8_t* values = source->values.data + source->values.offset;
     uint64_t count = source->count(source);
 
+#pragma omp parallel for
     for(uint64_t i = 0; i < count; ++i) {
-      source->copy(keys, values, i, &stack);
-      if (pipeline_->select) {
-        if (pipeline_->select(1, &stack)) {
-          pipeline_->transform(&stack);
-          sink->mutate(sink, (Mutation*)stack.top());
-        }
-      } else {
-        pipeline_->transform(&stack);
-        sink->mutate(sink, (const Mutation*)stack.top());
-      }
+      thread_local static Stack stack;
+      source->copy(
+          source->keys.data + source->keys.offset + i * source->keys.size,
+          source->values.data + source->values.offset + i * source->values.size,
+          i, &stack);
+      pipeline_->transform(&stack);
+      sink->mutate(sink, (const Mutation*)stack.top());
       stack.clear();
 
-      keys += source->keys.size;
-      values += source->values.size;
+      //keys = source->keys.data + source->keys.offset + i * source->keys.size;
+      //values += source->values.size;
     }
   }
 
