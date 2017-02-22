@@ -3,7 +3,7 @@
 
 #include <boost/container/vector.hpp>
 
-#include "../src/common.h"
+#include "common.h"
 
 #ifdef __COMPILE_AS_WINDOWS__
 #include <Windows.h>

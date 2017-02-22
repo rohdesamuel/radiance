@@ -19,7 +19,6 @@ template<typename Key_, typename Value_,
 struct Schema {
   typedef radiance::Table<Key_, Value_, Allocator_> Table;
   typedef radiance::View<Table> View;
-  typedef typename Table::Mutation Mutation;
   typedef typename Table::Element Element;
   typedef radiance::MutationBuffer<Table> MutationBuffer;
   typedef Key_ Key;

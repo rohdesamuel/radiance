@@ -1,11 +1,11 @@
-#include "src/radiance.h"
-#include "src/table.h"
-#include "src/stack_memory.h"
-#include "src/schema.h"
-#include "src/timer.h"
+#include "inc/radiance.h"
+#include "inc/table.h"
+#include "inc/stack_memory.h"
+#include "inc/schema.h"
+#include "inc/timer.h"
 
 #include <glm/glm.hpp>
-#include <omp.h>
+//#include <omp.h>
 #include <unordered_map>
 
 typedef std::vector<glm::vec3> Vectors;
@@ -20,9 +20,9 @@ typedef radiance::Schema<uint32_t, Transformation> Transformations;
 int main() {
 
   uint64_t count = 4096;
-  uint64_t iterations = 1000;
-  std::cout << "Max parallelization: " << omp_get_max_threads() << std::endl;
-  std::cout << "Number of threads: " << omp_get_num_threads() << std::endl;
+  uint64_t iterations = 10000;
+  //std::cout << "Max parallelization: " << omp_get_max_threads() << std::endl;
+  //std::cout << "Number of threads: " << omp_get_num_threads() << std::endl;
   std::cout << "Number of iterations: " << iterations << std::endl;
   std::cout << "Entity count: " << count << std::endl;
 

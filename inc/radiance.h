@@ -13,7 +13,9 @@
 
 BEGIN_EXTERN_C
 
+#ifdef __cplusplus
 namespace radiance {
+#endif
 
 struct Element {
   uint8_t* data;
@@ -35,13 +37,11 @@ struct Mutation {
 
 typedef bool (*Select)(uint8_t, ...);
 typedef void (*Transform)(struct Stack*);
+typedef void (*Callback)(struct Pipeline*, ...);
 
-typedef void (*Mutate)(struct Collection*, const Mutation*);
+typedef void (*Mutate)(struct Collection*, const struct Mutation*);
 typedef void (*Copy)(const uint8_t* key, const uint8_t* value, uint64_t index, struct Stack*);
-
-// Put the next element onto the stack. Gives nullptr as state to begin. Return
-// nullptr if at end.
-typedef uint8_t* (*Iterate)(struct Collection*, struct Stack*, uint8_t* state);
+typedef uint64_t (*Count)(struct Collection*);
 
 struct Iterator {
   uint8_t* data;
@@ -51,21 +51,27 @@ struct Iterator {
 
 struct Collection {
   const Id id;
-  uint8_t* self;
+  const char* name;
+
+  void* self;
 
   Iterator keys;
   Iterator values;
   
-  uint64_t (*count)(Collection*);
-
   Copy copy;
   Mutate mutate;
+  Count count;
+};
+
+struct Collections {
+  uint64_t count;
+  struct Collections** collections;
 };
 
 struct Pipeline {
   const Id id;
   const Id program;
-  void* self;
+  const void* self;
 
   uint8_t priority;
 
@@ -75,10 +81,9 @@ struct Pipeline {
 
 struct Program {
   const Id id;
-  void* self;
+  const char* name;
+  const void* self;
 };
-
-Universe* universe();
 
 Status::Code init(Universe* universe);
 Status::Code start();
@@ -86,16 +91,22 @@ Status::Code stop();
 Status::Code loop();
 
 Id create_program(const char* name);
-Pipeline* add_pipeline(const char* program, const char* source, const char* sink);
+
+struct Pipeline* add_pipeline(const char* program, const char* source, const char* sink);
+struct Pipeline* copy_pipeline();
+Status::Code remove_pipeline(const char* program, const char* source, const char* sink);
+
 Collection* add_collection(const char* program, const char* name);
 
-Status::Code add_source(Pipeline*, const char* collection);
-Status::Code add_sink(Pipeline*, const char* collection);
+Status::Code add_source(struct Pipeline*, const char* collection);
+Status::Code add_sink(struct Pipeline*, const char* collection);
 
 Status::Code share_collection(const char* source, const char* dest);
 Status::Code copy_collection(const char* source, const char* dest);
 
+#ifdef __cplusplus
 }  // namespace radiance
+#endif
 
 END_EXTERN_C
 

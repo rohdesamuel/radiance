@@ -52,8 +52,6 @@ class PipelineImpl {
     Collection* source = sources_[0];
     Collection* sink = sinks_[0];
 
-    //uint8_t* keys = source->keys.data + source->keys.offset;
-    //uint8_t* values = source->values.data + source->values.offset;
     uint64_t count = source->count(source);
 
 #pragma omp parallel for
@@ -66,9 +64,6 @@ class PipelineImpl {
       pipeline_->transform(&stack);
       sink->mutate(sink, (const Mutation*)stack.top());
       stack.clear();
-
-      //keys = source->keys.data + source->keys.offset + i * source->keys.size;
-      //values += source->values.size;
     }
   }
 
@@ -76,6 +71,7 @@ class PipelineImpl {
     Stack stack;
     std::unordered_map<uint8_t*, std::vector<uint8_t*>> joined;
 
+    // Naive Hash-Join implementation.
     uint64_t min_count = std::numeric_limits<uint64_t>::max();
     Collection* min_collection = nullptr;
     for (Collection* c : sources_) {

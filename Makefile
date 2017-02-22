@@ -1,4 +1,5 @@
 # Directories
+INC_DIR = inc
 SRC_DIR = src
 LIB_DIR = lib
 OBJ_DIR = obj
@@ -14,7 +15,14 @@ all:
 	#
 	# Now building libradiance...
 	# Current version is $(VERSION)
-	g++ -c -fPIC -fno-exceptions $(SRC_DIR)/*.cpp -Wall -Wextra -Werror -std=c++14 -O3 -lSDL2 -lGLEW -lGL -lGLU -fopenmp
+	g++ -c -fPIC -fno-exceptions -I$(INC_DIR) $(SRC_DIR)/*.cpp -Wall -Wextra -Werror -std=c++14 -O3 -lSDL2 -lGLEW -lGL -lGLU -fopenmp
+	g++ -shared -fPIC -fno-exceptions -Wl,-soname,libradiance.so.$(MAJOR_VERSION) -o $(LIB_DIR)/libradiance.so.$(VERSION) *.o -lc
+	@ln -f -r -s $(LIB_DIR)/libradiance.so.$(VERSION) $(LIB_DIR)/libradiance.so.$(MAJOR_VERSION)
+	@ln -f -r -s $(LIB_DIR)/libradiance.so.$(VERSION) $(LIB_DIR)/libradiance.so
+	@mv *.o obj/
+
+debug:
+	g++ -c -fPIC -fno-exceptions -I$(INC_DIR) $(SRC_DIR)/*.cpp -Wall -Wextra -Werror -std=c++14 -g -lSDL2 -lGLEW -lGL -lGLU -fopenmp
 	g++ -shared -fPIC -fno-exceptions -Wl,-soname,libradiance.so.$(MAJOR_VERSION) -o $(LIB_DIR)/libradiance.so.$(VERSION) *.o -lc
 	@ln -f -r -s $(LIB_DIR)/libradiance.so.$(VERSION) $(LIB_DIR)/libradiance.so.$(MAJOR_VERSION)
 	@ln -f -r -s $(LIB_DIR)/libradiance.so.$(VERSION) $(LIB_DIR)/libradiance.so
