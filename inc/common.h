@@ -19,10 +19,9 @@
 #endif  // defined _WIN64 || defined __LP64__
 
 #ifdef __ENGINE_DEBUG__
+#ifdef __COMPILE_AS_WINDOWS__
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
-
-#ifdef __COMPILE_AS_WINDOWS__
 #include <crtdbg.h>
 #endif  // COMPILE_AS_WINDOWS__
 
@@ -31,9 +30,13 @@ do{ if (!(expr)) exit(exit_code); } while (0)
 
 #define DEBUG_OP(expr) do{ expr; } while(0)
 
+#define ASSERT_NOT_NULL(var) \
+DEBUG_ASSERT((var) != nullptr, ::radiance::Status::Code::NULL_POINTER)
+
 #else
 #define DEBUG_ASSERT(expr, exit_code) do{} while(0)
 #define DEBUG_OP(expr) do{} while(0)
+#define ASSERT_NOT_NULL(var) do {} while(0)
 
 #endif  // __ENGINE_DEBUG__
 
@@ -87,6 +90,7 @@ struct Status {
     BAD_RUN_STATE,
     DOES_NOT_EXIST,
     ALREADY_EXISTS,
+    UNKNOWN_TRIGGER_POLICY,
   };
 
   Status(Code code=Code::OK, const char* message=""):

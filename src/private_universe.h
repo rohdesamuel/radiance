@@ -5,12 +5,13 @@
 #include "table.h"
 #include "stack_memory.h"
 
+#include <algorithm>
 #include <cstring>
+#include <limits>
+#include <set>
 #include <string>
 #include <unordered_map>
-#include <set>
 #include <vector>
-#include <limits>
 
 #define LOG_VAR(var) std::cout << #var << " = " << var << std::endl
 
@@ -139,6 +140,35 @@ class ProgramImpl {
     return pipeline;
   }
 
+  Status::Code remove_pipeline(struct Pipeline* pipeline) {
+    return disable_pipeline(pipeline);
+  }
+
+  Status::Code enable_pipeline(struct Pipeline* pipeline, ExecutionPolicy policy) {
+    disable_pipeline(pipeline);
+
+    if (policy.trigger == Trigger::LOOP) {
+      loop_pipelines_.push_back(pipeline);
+      std::sort(loop_pipelines_.begin(), loop_pipelines_.end());
+    } else if (policy.trigger == Trigger::EVENT) {
+      event_pipelines_.insert(pipeline);
+    } else {
+      return Status::UNKNOWN_TRIGGER_POLICY;
+    }
+
+    return Status::OK;
+  }
+
+  Status::Code disable_pipeline(struct Pipeline* pipeline) {
+    auto found = std::lower_bound(loop_pipelines_.begin(), loop_pipelines_.end(), pipeline);
+    if (found != loop_pipelines_.end()) {
+      loop_pipelines_.erase(found);
+    }
+
+    event_pipelines_.erase(pipeline);
+    return Status::OK;
+  }
+
   Status::Code add_source(Pipeline* pipeline, Collection* source) {
     ((PipelineImpl*)(pipeline->self))->add_source(source);
     return add_pipeline_to_collection(pipeline, source, &readers_);
@@ -154,7 +184,7 @@ class ProgramImpl {
   }
 
   void run() {
-    for(Pipeline* p : pipelines_) {
+    for(Pipeline* p : loop_pipelines_) {
       ((PipelineImpl*)p->self)->run();
     }
   }
@@ -163,8 +193,8 @@ class ProgramImpl {
   Pipeline* new_pipeline(Id id) {
     Pipeline* p = (Pipeline*)malloc(sizeof(Pipeline));
     memset(p, 0, sizeof(Pipeline));
-    *(Id*)(&p->program) = program_->id;
     *(Id*)(&p->id) = id;
+    *(Id*)(&p->program) = program_->id;
     p->self = new PipelineImpl(p);
     return p;
   }
@@ -199,6 +229,8 @@ class ProgramImpl {
   Mutators writers_;
   Mutators readers_;
   std::vector<Pipeline*> pipelines_;
+  std::vector<Pipeline*> loop_pipelines_;
+  std::set<Pipeline*> event_pipelines_;
 };
 
 class CollectionRegistry {
@@ -208,7 +240,7 @@ class CollectionRegistry {
     Collection* ret = nullptr;
     if (collections_.find(name) == -1) {
       Handle id = collections_.insert(name, nullptr);
-      ret = new_collection(id);
+      ret = new_collection(id, collection);
       collections_[id] = ret;
     }
     return ret;
@@ -239,10 +271,11 @@ class CollectionRegistry {
   }
 
  private:
-  Collection* new_collection(Id id) {
+  Collection* new_collection(Id id, const char* name) {
     Collection* c = (Collection*)malloc(sizeof(Collection));
     memset(c, 0, sizeof(Collection));
     *(Id*)(&c->id) = id;
+    *(char**)(&c->name) = (char*)name;
     return c;
   }
 
@@ -255,7 +288,7 @@ class ProgramRegistry {
     Id id = programs_.find(program);
     if (id == -1) {
       id = programs_.insert(program, nullptr);
-      Program* p = new_program(id);
+      Program* p = new_program(id, program);
       p->self = new ProgramImpl{p};
       programs_[id] = p;
     }
@@ -288,10 +321,11 @@ class ProgramRegistry {
     return (ProgramImpl*)(p->self);
   }
  private:
-  Program* new_program(Id id) {
+  Program* new_program(Id id, const char* name) {
     Program* p = (Program*)malloc(sizeof(Program));
     memset(p, 0, sizeof(Program));
     *(Id*)(&p->id) = id;
+    *(char**)(&p->name) = (char*)name;
     return p;
   }
 
@@ -318,7 +352,16 @@ class PrivateUniverse {
   Status::Code loop();
 
   Id create_program(const char* name);
-  Pipeline* add_pipeline(const char* program, const char* source, const char* sink);
+
+  // Pipeline manipulation.
+  struct Pipeline* add_pipeline(const char* program, const char* source, const char* sink);
+  struct Pipeline* copy_pipeline(struct Pipeline* pipeline, const char* dest);
+  Status::Code remove_pipeline(struct Pipeline* pipeline);
+
+  Status::Code enable_pipeline(struct Pipeline* pipeline, ExecutionPolicy policy);
+  Status::Code disable_pipeline(struct Pipeline* pipeline);
+
+  // Collection manipulation.
   Collection* add_collection(const char* program, const char* collection);
 
   Status::Code add_source(Pipeline*, const char* collection);

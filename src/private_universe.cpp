@@ -53,7 +53,8 @@ Id PrivateUniverse::create_program(const char* name) {
   return programs_.create_program(name); 
 }
 
-Pipeline* PrivateUniverse::add_pipeline(const char* program, const char* source, const char* sink) {
+struct Pipeline* PrivateUniverse::add_pipeline(
+    const char* program, const char* source, const char* sink) {
   Program* p = programs_.get_program(program);
   if (!p) {
     return nullptr;
@@ -63,6 +64,42 @@ Pipeline* PrivateUniverse::add_pipeline(const char* program, const char* source,
   Collection* snk = sink ? collections_.get(form_path(program, sink).data()) : nullptr;
 
   return programs_.to_impl(p)->add_pipeline(src, snk);
+}
+
+Status::Code PrivateUniverse::remove_pipeline(struct Pipeline* pipeline) {
+  ASSERT_NOT_NULL(pipeline);
+
+  Program* p = programs_.get_program(pipeline->program);
+  ASSERT_NOT_NULL(p);
+
+  ProgramImpl* program = programs_.to_impl(p);
+  return program->remove_pipeline(pipeline);
+}
+
+struct Pipeline* PrivateUniverse::copy_pipeline(
+    struct Pipeline*, const char*) {
+  return nullptr;
+}
+
+Status::Code PrivateUniverse::enable_pipeline(
+    struct Pipeline* pipeline, ExecutionPolicy policy) {
+  ASSERT_NOT_NULL(pipeline);
+
+  Program* p = programs_.get_program(pipeline->program);
+  ASSERT_NOT_NULL(p);
+
+  ProgramImpl* program = programs_.to_impl(p);
+  return program->enable_pipeline(pipeline, policy);
+}
+
+Status::Code PrivateUniverse::disable_pipeline(struct Pipeline* pipeline) {
+  ASSERT_NOT_NULL(pipeline);
+
+  Program* p = programs_.get_program(pipeline->program);
+  ASSERT_NOT_NULL(p);
+
+  ProgramImpl* program = programs_.to_impl(p);
+  return program->disable_pipeline(pipeline);
 }
 
 Collection* PrivateUniverse::add_collection(const char* program, const char* name) {

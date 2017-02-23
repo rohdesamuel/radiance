@@ -68,12 +68,24 @@ struct Collections {
   struct Collections** collections;
 };
 
+enum class Trigger {
+  UNKNOWN = 0,
+  LOOP,
+  EVENT,
+};
+
+const int8_t MAX_PRIORITY = 0x7F;
+const int8_t MIN_PRIORITY = 0xFF;
+
+struct ExecutionPolicy {
+  int8_t priority;
+  Trigger trigger;
+};
+
 struct Pipeline {
   const Id id;
   const Id program;
   const void* self;
-
-  uint8_t priority;
 
   Select select;
   Transform transform;
@@ -93,8 +105,10 @@ Status::Code loop();
 Id create_program(const char* name);
 
 struct Pipeline* add_pipeline(const char* program, const char* source, const char* sink);
-struct Pipeline* copy_pipeline();
-Status::Code remove_pipeline(const char* program, const char* source, const char* sink);
+struct Pipeline* copy_pipeline(struct Pipeline* pipeline, const char* dest);
+Status::Code remove_pipeline(struct Pipeline* pipeline);
+Status::Code enable_pipeline(struct Pipeline* pipeline, ExecutionPolicy policy);
+Status::Code disable_pipeline(struct Pipeline* pipeline);
 
 Collection* add_collection(const char* program, const char* name);
 

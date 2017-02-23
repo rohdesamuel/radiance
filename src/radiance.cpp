@@ -37,8 +37,24 @@ Id create_program(const char* name) {
   return AS_PRIVATE(create_program(name));
 }
 
-Pipeline* add_pipeline(const char* program, const char* source, const char* sink) {
+struct Pipeline* add_pipeline(const char* program, const char* source, const char* sink) {
   return AS_PRIVATE(add_pipeline(program, source, sink));
+}
+
+struct Pipeline* copy_pipeline(struct Pipeline* pipeline, const char* dest) {
+  return AS_PRIVATE(copy_pipeline(pipeline, dest));
+}
+
+Status::Code remove_pipeline(struct Pipeline* pipeline) {
+  return AS_PRIVATE(remove_pipeline(pipeline));
+}
+
+Status::Code enable_pipeline(struct Pipeline* pipeline, ExecutionPolicy policy) {
+  return AS_PRIVATE(enable_pipeline(pipeline, policy));
+}
+
+Status::Code disable_pipeline(struct Pipeline* pipeline) {
+  return AS_PRIVATE(disable_pipeline(pipeline));
 }
 
 Collection* add_collection(const char* program, const char* name) {
