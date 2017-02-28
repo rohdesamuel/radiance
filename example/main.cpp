@@ -4,128 +4,121 @@
 #include "inc/schema.h"
 #include "inc/timer.h"
 
-#include <glm/glm.hpp>
-#include <omp.h>
+#define GL3_PROTOTYPES 1
+
+#include <GL/glew.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<X11/X.h>
+#include<X11/Xlib.h>
+#include<GL/gl.h>
+#include<GL/glx.h>
+#include<GL/glu.h>
+
+#include "particles.h"
+
 #include <unordered_map>
 
-typedef std::vector<glm::vec3> Vectors;
+void add_render_pipeline() {
+  radiance::Pipeline* render_pipeline =
+      radiance::add_pipeline(kMainProgram, kParticleCollection, nullptr);
+  render_pipeline->select = nullptr;
+  render_pipeline->transform = [](radiance::Stack* s){
+    Particles::Element* el =
+        (Particles::Element*)((radiance::Mutation*)(s->top()))->element;
+    glPushMatrix();
+    glTranslatef(el->value.p.x, el->value.p.y, 0);
+    glBegin(GL_POINTS);
+    glColor3f(1., 0., 0.); glVertex3f(0, 0, 0);
+    glEnd();
+    glPopMatrix();
+  };
 
-struct Transformation {
-  glm::vec3 p;
-  glm::vec3 v;
-};
+  radiance::ExecutionPolicy policy;
+  policy.priority = radiance::MIN_PRIORITY;
+  policy.trigger = radiance::Trigger::LOOP;
+  enable_pipeline(render_pipeline, policy);
+}
 
-typedef radiance::Schema<uint32_t, Transformation> Transformations;
+Display                 *dpy;
+Window                  root;
+GLint                   att[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
+XVisualInfo             *vi;
+Colormap                cmap;
+XSetWindowAttributes    swa;
+Window                  win;
+GLXContext              glc;
+XWindowAttributes       gwa;
+XEvent                  xev;
+int main(int, char* []) {
 
-int main() {
+  dpy = XOpenDisplay(NULL);
 
-  uint64_t count = 4096;
-  uint64_t iterations = 100000;
-  std::cout << "Number of threads: " << omp_get_max_threads() << std::endl;
-  std::cout << "Number of iterations: " << iterations << std::endl;
-  std::cout << "Entity count: " << count << std::endl;
+  if(dpy == NULL) {
+    printf("\n\tcannot connect to X server\n\n");
+    exit(0);
+  }
+
+  root = DefaultRootWindow(dpy);
+
+  vi = glXChooseVisual(dpy, 0, att);
+
+  if(vi == NULL) {
+    printf("\n\tno appropriate visual found\n\n");
+    exit(0);
+  } 
+  else {
+    printf("\n\tvisual %p selected\n", (void *)vi->visualid); /* %p creates hexadecimal output like in glxinfo */
+  }
+
+
+  cmap = XCreateColormap(dpy, root, vi->visual, AllocNone);
+
+  swa.colormap = cmap;
+  swa.event_mask = ExposureMask | KeyPressMask;
+
+  win = XCreateWindow(dpy, root, 0, 0, 600, 600, 0, vi->depth, InputOutput, vi->visual, CWColormap | CWEventMask, &swa);
+
+  XMapWindow(dpy, win);
+  XStoreName(dpy, win, "VERY SIMPLE APPLICATION");
+
+  glc = glXCreateContext(dpy, vi, NULL, GL_TRUE);
+  glXMakeCurrent(dpy, win, glc);
+
+  glEnable(GL_DEPTH_TEST); 
 
   radiance::Universe uni;
   radiance::init(&uni);
+  radiance::create_program(kMainProgram); 
 
-  radiance::create_program("physics"); 
-  radiance::Collection* transformations =
-      radiance::add_collection("physics", "transformations");
-
-  Transformations::Table* table = new Transformations::Table();
-  table->keys.reserve(count);
-  table->values.reserve(count);
-
-  for (uint64_t i = 0; i < count; ++i) {
-    glm::vec3 p{(float)i, 0, 0};
-    glm::vec3 v{1, 0, 0};
-    table->insert(i, {p, v});
-  }
-
-  radiance::Copy copy =
-      [](const uint8_t*, const uint8_t* value, uint64_t offset,
-         radiance::Stack* stack) {
-        radiance::Mutation* mutation = (radiance::Mutation*)stack->alloc(
-            sizeof(radiance::Mutation) + sizeof(Transformations::Element));
-        mutation->element = (uint8_t*)(mutation + sizeof(radiance::Mutation));
-        mutation->mutate_by = radiance::MutateBy::UPDATE;
-        Transformations::Element* el =
-            (Transformations::Element*)(mutation->element);
-        el->offset = offset;
-        new (&el->value) Transformations::Value(
-            *(Transformations::Value*)(value) );
-      };
-
-  radiance::Mutate mutate =
-      [](radiance::Collection* c, const radiance::Mutation* m) {
-        Transformations::Table* t = (Transformations::Table*)c->self;
-        Transformations::Element* el = (Transformations::Element*)(m->element);
-        t->values[el->offset] = std::move(el->value); 
-      };
-
-  transformations->self = (uint8_t*)table;
-  transformations->copy = copy;
-  transformations->mutate = mutate;
-  transformations->count = [](radiance::Collection* c) -> uint64_t {
-    return ((Transformations::Table*)c->self)->size();
-  };
-
-  transformations->keys.data = (uint8_t*)table->keys.data();
-  transformations->keys.size = sizeof(Transformations::Key);
-  transformations->keys.offset = 0;
-  transformations->values.data = (uint8_t*)table->values.data();
-  transformations->values.size = sizeof(Transformations::Value);
-  transformations->values.offset = 0;
-
-  radiance::Pipeline* pipeline =
-      radiance::add_pipeline("physics", "transformations", "transformations");
-  pipeline->select = nullptr;
-  pipeline->transform = [](radiance::Stack* s) {
-    Transformations::Element* el =
-        (Transformations::Element*)((radiance::Mutation*)(s->top()))->element;
-    el->value.p += el->value.v;
-  };
-  {
-    radiance::ExecutionPolicy policy;
-    policy.priority = radiance::MAX_PRIORITY;
-    policy.trigger = radiance::Trigger::LOOP;
-    enable_pipeline(pipeline, policy);
-  }
-
-
-  radiance::create_program("render");
-  radiance::add_collection("render", "meshes");
-  radiance::share_collection("physics/transformations", "render/transformations");
-
-  radiance::Pipeline* render_pipeline =
-      radiance::add_pipeline("render", "transformations", nullptr);
-  radiance::add_source(render_pipeline, "render/meshes");
-  render_pipeline->select = nullptr;
-  render_pipeline->transform = [](radiance::Stack*){};
-
-  radiance::ExecutionPolicy policy;
-  policy.priority = radiance::MAX_PRIORITY;
-  policy.trigger = radiance::Trigger::LOOP;
-  enable_pipeline(render_pipeline, policy);
+  uint64_t particle_count = 1000;
+  add_particle_collection(kParticleCollection, particle_count);
+  add_particle_pipeline(kParticleCollection);
+  add_render_pipeline();
 
   radiance::start();
-  double total = 0.0;
-  double avg = 0.0;
-  Timer timer;
-  for (uint64_t i = 0; i < iterations; ++i) {
-    timer.start();
-    radiance::loop();
-    timer.stop();
-    total += timer.get_elapsed_ns();
-  }
-  avg = total / iterations;
-  std::cout << "elapsed ns: " << total << std::endl;
-  std::cout << "avg ms per iteration: " << avg / 1e6 << std::endl;
-  std::cout << "avg ns per iteration: " << avg << std::endl;
-  std::cout << "avg ns per entity per iteration: " << avg / count << std::endl;
-  std::cout << "iteration throughput: " << (1e9 / avg) << std::endl;
-  std::cout << "entity throughput: " << count / (avg / 1e9) << std::endl;
-  radiance::stop();
+  while (1) {
+    if (XCheckWindowEvent(dpy, win, KeyPressMask, &xev)) {
+      if (xev.type == KeyPress) {
+        glXMakeCurrent(dpy, None, NULL);
+        glXDestroyContext(dpy, glc);
+        XDestroyWindow(dpy, win);
+        XCloseDisplay(dpy);
+        radiance::stop();
+        exit(0);
+      }
+    }
+    XGetWindowAttributes(dpy, win, &gwa);
+    glViewport(0, 0, gwa.width, gwa.height);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  return 0;
+    glLoadIdentity();
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    radiance::loop();
+    glXSwapBuffers(dpy, win);
+  }
 }

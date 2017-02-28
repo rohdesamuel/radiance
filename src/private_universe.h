@@ -12,12 +12,79 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <mutex>
 
 #define LOG_VAR(var) std::cout << #var << " = " << var << std::endl
 
 namespace radiance {
 
 const static char NAMESPACE_DELIMETER = '/';
+
+class CollectionImpl {
+ private:
+  Collection* collection_;
+
+ public:
+  CollectionImpl(Collection* collection) : collection_(collection) {}
+
+  inline Collection* collection() {
+    return collection_;
+  }
+};
+
+class CollectionRegistry {
+ public:
+  Collection* add(const char* program, const char* collection) {
+    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
+    Collection* ret = nullptr;
+    if (collections_.find(name) == -1) {
+      Handle id = collections_.insert(name, nullptr);
+      ret = new_collection(id, collection);
+      collections_[id] = ret;
+    }
+    return ret;
+  }
+
+  Status::Code share(const char* source, const char* dest) {
+    Handle src = collections_.find(source);
+    Handle dst = collections_.find(dest);
+    if (src != -1 && dst == -1) {
+      collections_.insert(dest, collections_[src]);
+      return Status::OK;
+    }
+    return Status::ALREADY_EXISTS;
+  }
+
+  Collection* get(const char* name) {
+    Collection* ret = nullptr;
+    Handle id;
+    if ((id = collections_.find(name)) != -1) {
+      ret = collections_[id];
+    }
+    return ret;
+  }
+
+  Collection* get(const char* program, const char* collection) {
+    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
+    return get(name.data());
+  }
+
+  inline static CollectionImpl* to_impl(Collection* c) {
+    return (CollectionImpl*)c->self;
+  }
+
+ private:
+  Collection* new_collection(Id id, const char* name) {
+    Collection* c = (Collection*)malloc(sizeof(Collection));
+    memset(c, 0, sizeof(Collection));
+    *(Id*)(&c->id) = id;
+    *(char**)(&c->name) = (char*)name;
+    *(void**)(&c->self) = new CollectionImpl(c);
+    return c;
+  }
+
+  Table<std::string, Collection*> collections_;
+};
 
 class PipelineImpl {
  private:
@@ -45,14 +112,34 @@ class PipelineImpl {
   }
 
   void run() {
-    run_1_to_1();
+    size_t source_size = sources_.size();
+    size_t sink_size = sinks_.size();
+    if (source_size == 1 && sink_size == 1) {
+      run_1_to_1();
+    } else if (source_size == 1 && sink_size == 0) {
+      run_1_to_0();
+    }
+  }
+
+  void run_1_to_0() {
+    Collection* source = sources_[0];
+    uint64_t count = source->count(source);
+
+#pragma omp parallel for
+    for(uint64_t i = 0; i < count; ++i) {
+      thread_local static Stack stack;
+      source->copy(
+          source->keys.data + source->keys.offset + i * source->keys.size,
+          source->values.data + source->values.offset + i * source->values.size,
+          i, &stack);
+      pipeline_->transform(&stack);
+      stack.clear();
+    }
   }
 
   void run_1_to_1() {
-    
     Collection* source = sources_[0];
     Collection* sink = sinks_[0];
-
     uint64_t count = source->count(source);
 
 #pragma omp parallel for
@@ -233,55 +320,6 @@ class ProgramImpl {
   std::set<Pipeline*> event_pipelines_;
 };
 
-class CollectionRegistry {
- public:
-  Collection* add(const char* program, const char* collection) {
-    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
-    Collection* ret = nullptr;
-    if (collections_.find(name) == -1) {
-      Handle id = collections_.insert(name, nullptr);
-      ret = new_collection(id, collection);
-      collections_[id] = ret;
-    }
-    return ret;
-  }
-
-  Status::Code share(const char* source, const char* dest) {
-    Handle src = collections_.find(source);
-    Handle dst = collections_.find(dest);
-    if (src != -1 && dst == -1) {
-      collections_.insert(dest, collections_[src]);
-      return Status::OK;
-    }
-    return Status::ALREADY_EXISTS;
-  }
-
-  Collection* get(const char* name) {
-    Collection* ret = nullptr;
-    Handle id;
-    if ((id = collections_.find(name)) != -1) {
-      ret = collections_[id];
-    }
-    return ret;
-  }
-
-  Collection* get(const char* program, const char* collection) {
-    std::string name = std::string(program) + NAMESPACE_DELIMETER + std::string(collection);
-    return get(name.data());
-  }
-
- private:
-  Collection* new_collection(Id id, const char* name) {
-    Collection* c = (Collection*)malloc(sizeof(Collection));
-    memset(c, 0, sizeof(Collection));
-    *(Id*)(&c->id) = id;
-    *(char**)(&c->name) = (char*)name;
-    return c;
-  }
-
-  Table<std::string, Collection*> collections_;
-};
-
 class ProgramRegistry {
  public:
   Id create_program(const char* program) {
@@ -320,6 +358,7 @@ class ProgramRegistry {
   inline ProgramImpl* to_impl(Program* p) {
     return (ProgramImpl*)(p->self);
   }
+
  private:
   Program* new_program(Id id, const char* name) {
     Program* p = (Program*)malloc(sizeof(Program));

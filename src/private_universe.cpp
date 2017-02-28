@@ -39,7 +39,7 @@ Status::Code PrivateUniverse::start() {
 }
 
 Status::Code PrivateUniverse::loop() {
-  ProgramImpl* p = (ProgramImpl*)programs_.get_program("physics")->self;
+  ProgramImpl* p = (ProgramImpl*)programs_.get_program("main")->self;
   p->run();
 
   return transition({RunState::RUNNING, RunState::STARTED}, RunState::RUNNING);

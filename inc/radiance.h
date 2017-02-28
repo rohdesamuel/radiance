@@ -22,6 +22,16 @@ struct Element {
   size_t size;
 };
 
+struct TypedElement {
+  const Id collection;
+  Element element;
+};
+
+struct Tuple {
+  uint64_t count;
+  TypedElement* element;
+};
+
 enum class MutateBy {
   UNKNOWN = 0,
   INSERT,
@@ -52,8 +62,9 @@ struct Iterator {
 struct Collection {
   const Id id;
   const char* name;
+  const void* self;
 
-  void* self;
+  void* collection;
 
   Iterator keys;
   Iterator values;
@@ -74,11 +85,11 @@ enum class Trigger {
   EVENT,
 };
 
-const int8_t MAX_PRIORITY = 0x7F;
-const int8_t MIN_PRIORITY = 0xFF;
+const int16_t MAX_PRIORITY = 0x7FFF;
+const int16_t MIN_PRIORITY = 0x8001;
 
 struct ExecutionPolicy {
-  int8_t priority;
+  int16_t priority;
   Trigger trigger;
 };
 
